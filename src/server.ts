@@ -352,4 +352,5 @@ app.get("/runs/:runId", (req, res) => {
 const PORT = Number(process.env.PORT ?? 8787);
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`API listening on http://127.0.0.1:${PORT}`);
+  console.log(`[Config] CURSOR_API_KEY exists=${Boolean(process.env.CURSOR_API_KEY)}`);
 });

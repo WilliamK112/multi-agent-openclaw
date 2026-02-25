@@ -29,7 +29,7 @@ export async function cursorAct(repoPath: string, instruction: string, runId: st
       instruction,
       summary: "",
       mode: "cursor-api",
-      error: "Missing CURSOR_API_KEY in environment",
+      error: "cursor_auth_failed: status=0 endpoint=/teams/members missing CURSOR_API_KEY",
     };
   }
 
@@ -40,18 +40,20 @@ export async function cursorAct(repoPath: string, instruction: string, runId: st
 
   const statusCodes: number[] = [];
 
-  const meRes = await fetch("https://api.cursor.com/v0/me", { headers });
-  statusCodes.push(meRes.status);
-  if (!meRes.ok) {
-    const msg = await meRes.text();
+  // Debug-first healthcheck endpoint per Cursor docs examples
+  const healthEndpoint = "https://api.cursor.com/teams/members";
+  const healthRes = await fetch(healthEndpoint, { headers });
+  statusCodes.push(healthRes.status);
+  const healthBody = (await healthRes.text()).slice(0, 200);
+  if (!healthRes.ok) {
     return {
       ok: false,
       repoPath,
       instruction,
-      summary: "",
+      summary: `cursor healthcheck failed endpoint=/teams/members status=${healthRes.status} body=${healthBody}`,
       mode: "cursor-api",
       api: { meOk: false, modelsOk: false, statusCodes },
-      error: `Cursor API /v0/me failed (${meRes.status}): ${msg.slice(0, 240)}`,
+      error: `cursor_auth_failed: status=${healthRes.status} endpoint=/teams/members body=${healthBody}`,
     };
   }
 
