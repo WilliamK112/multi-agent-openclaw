@@ -30,6 +30,10 @@ type RunRecord = {
     stderr: string;
     timestamp: string;
   } | null;
+  cursorEdit?: {
+    marker: string;
+    retryCount: number;
+  } | null;
 };
 
 const app = express();
@@ -91,13 +95,26 @@ async function continueRun(runId: string) {
         }
       }
 
+      if (run.goal.toLowerCase().includes("[debug_cursor_ui_write]") && step.inputs?.command === "__DEBUG_POST_WRITE__") {
+        step.inputs = {
+          ...(step.inputs ?? {}),
+          marker: `CURSOR_UI_EDIT_${run.id}`,
+        };
+      }
+
       const result = await executor(step, process.cwd());
 
-      const shellLog = result.logs.find((l) => l.skill === "shell_run") as any;
-      if (shellLog?.output) {
+      const shellLogs = result.logs.filter((l) => l.skill === "shell_run") as any[];
+      for (const shellLog of shellLogs) {
         const out = shellLog.output;
         const cmd = shellLog.input?.command ?? "unknown";
         const code = out.ok ? 0 : Number(out.code ?? 1);
+        const stdoutShort = String(out.stdout ?? "").split("\n").slice(0, 6).join("\\n");
+        const stderrShort = String(out.stderr ?? "").split("\n").slice(0, 6).join("\\n");
+        pushLog(run, `shell_run: command=${cmd} exitCode=${code}`);
+        if (stdoutShort.trim()) pushLog(run, `shell_stdout:\n${stdoutShort}`);
+        if (stderrShort.trim()) pushLog(run, `shell_stderr:\n${stderrShort}`);
+
         if (run.goal.toLowerCase().includes("test output demo")) {
           run.selfCheck = {
             command: String(cmd),
@@ -117,6 +134,50 @@ async function continueRun(runId: string) {
         }
       }
 
+      if (run.goal.toLowerCase().includes("cursor readme demo") && step.id === "step-3") {
+        const marker = run.cursorEdit?.marker ?? "";
+        const readmePath = `${process.cwd()}/README.md`;
+        const content = await import("node:fs/promises").then((m) => m.readFile(readmePath, "utf8")).catch(() => "");
+        const okMarker = marker ? content.includes(`marker=${marker}`) : false;
+        const okLine = content.includes("Edited inside Cursor UI (not shell).");
+
+        if (!okMarker || !okLine) {
+          if ((run.cursorEdit?.retryCount ?? 0) < 1) {
+            run.cursorEdit = { marker: run.cursorEdit?.marker ?? marker, retryCount: 1 };
+            run.approvedStepIds = [];
+            run.nextStepIndex = 0;
+            run.pendingStepId = null;
+            run.pendingTool = null;
+            run.pendingReason = null;
+            pushLog(run, "cursor_ui_edit_retry: marker not found; retrying step-1 and step-2");
+            run.isProcessing = false;
+            await continueRun(run.id);
+            return;
+          }
+
+          run.status = "error";
+          run.error = "cursor_ui_edit_failed: marker not found after retry";
+          pushLog(run, "cursor_ui_edit_failed: marker not found after retry");
+          pushLog(run, "run:error");
+          run.isProcessing = false;
+          return;
+        }
+
+        pushLog(run, `cursor_ui_edit_verified: marker=${marker}`);
+      }
+
+      const fileReadLog = result.logs.find((l) => l.skill === "file_read") as any;
+      if (fileReadLog?.output?.content && (run.goal.toLowerCase().includes("[debug_readme_marker]") || run.goal.toLowerCase().includes("[debug_cursor_ui_write]"))) {
+        const full = String(fileReadLog.output.content);
+        const tailLines = full.split("\n").slice(-80).join("\n");
+        const markerNeedle = run.goal.toLowerCase().includes("[debug_cursor_ui_write]")
+          ? `marker=CURSOR_UI_EDIT_${run.id}`
+          : "marker=CURSOR_UI_EDIT_";
+        const markerFound = full.includes(markerNeedle);
+        pushLog(run, `file_read_tail:\n${tailLines}`);
+        pushLog(run, `markerFound=${markerFound} needle=${markerNeedle}`);
+      }
+
       const openclawLog = result.logs.find((l) => l.skill === "openclaw_act") as any;
       if (openclawLog?.output?.output) {
         const summary = String(openclawLog.output.output).slice(0, 220);
@@ -127,7 +188,7 @@ async function continueRun(runId: string) {
       run.nextStepIndex = i + 1;
     }
 
-    run.qa = await qa(process.cwd(), run.goal);
+    run.qa = await qa(process.cwd(), run.goal, run.id);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
     run.status = "done";
@@ -164,6 +225,7 @@ app.post("/run", (req, res) => {
     approvedStepIds: [],
     isProcessing: false,
     selfCheck: null,
+    cursorEdit: { marker: `CURSOR_UI_EDIT_${runId}`, retryCount: 0 },
   };
 
   runs.set(runId, record);
@@ -187,6 +249,19 @@ app.post("/run", (req, res) => {
       pushLog(run, `[Config] ANTHROPIC_API_KEY ${key ? "exists" : "missing"}`);
 
       run.plan = await planner(goal, provider, model);
+      if (run.plan) {
+        for (const s of run.plan.steps) {
+          if (!s.inputs) continue;
+          const replaced: Record<string, string> = {};
+          for (const [k, v] of Object.entries(s.inputs)) {
+            replaced[k] = String(v).replaceAll("__RUN_ID__", run.id);
+          }
+          s.inputs = replaced;
+        }
+      }
+      if (run.goal.toLowerCase().includes("cursor readme demo") && run.cursorEdit) {
+        pushLog(run, `cursor_marker: ${run.cursorEdit.marker}`);
+      }
       pushLog(run, "planner:done");
       pushLog(run, "[Planner] Plan JSON:");
       pushLog(run, JSON.stringify(run.plan));

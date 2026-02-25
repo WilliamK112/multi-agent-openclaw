@@ -49,7 +49,7 @@ function fallbackPlan(goal: string): Plan {
           objective: "Append Cursor Automation Demo section to README via openclaw_act",
           tools: ["openclaw_act"],
           success_criteria: "README contains Cursor Automation Demo section",
-          inputs: { instruction: "openclaw: cursor_append_readme_demo" },
+          inputs: { instruction: "openclaw: cursor_append_readme_demo CURSOR_UI_EDIT___RUN_ID__" },
         },
         {
           id: "step-3",
@@ -57,6 +57,57 @@ function fallbackPlan(goal: string): Plan {
           tools: ["file_read"],
           success_criteria: "README content can be read with expected section",
           inputs: { path: "README.md" },
+        },
+      ],
+    };
+  }
+
+  if (goal.toLowerCase().includes("[debug_readme_marker]")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Read-only shell diagnostics for README marker",
+          tools: ["shell_run"],
+          success_criteria: "stat/tail/grep outputs collected",
+          inputs: { command: "__DEBUG_README_DIAG__" },
+        },
+        {
+          id: "step-2",
+          objective: "Read README by absolute path and report markerFound",
+          tools: ["file_read"],
+          success_criteria: "file_read tail and markerFound logged",
+          inputs: { path: "/Users/William/Projects/multi-agent-openclaw/README.md" },
+        },
+      ],
+    };
+  }
+
+  if (goal.toLowerCase().includes("[debug_cursor_ui_write]")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Cursor UI write marker with save twice",
+          tools: ["openclaw_act"],
+          success_criteria: "marker typed and file saved in Cursor UI",
+          inputs: { instruction: "openclaw: cursor_debug_write_marker CURSOR_UI_EDIT___RUN_ID__" },
+        },
+        {
+          id: "step-2",
+          objective: "Read-only shell post-write diagnostics",
+          tools: ["shell_run"],
+          success_criteria: "stat/tail/grep show new marker",
+          inputs: { command: "__DEBUG_POST_WRITE__" },
+        },
+        {
+          id: "step-3",
+          objective: "Read README absolute path and verify exact marker",
+          tools: ["file_read"],
+          success_criteria: "markerFound exact true",
+          inputs: { path: "/Users/William/Projects/multi-agent-openclaw/README.md" },
         },
       ],
     };

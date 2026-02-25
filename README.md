@@ -82,3 +82,31 @@ curl -s http://127.0.0.1:8787/runs/RUN_ID_HERE
 - This run was triggered from CodePilot GUI (/agent or /runs).
 - openclaw_act executes only after Approval/Resume.
 - Next step: run npm test and save output to docs/TEST_OUTPUT.txt (TODO)
+
+---
+## Cursor Automation Demo
+- Edited inside Cursor UI (not shell).
+- Protected by Approval/Resume for openclaw_act.
+- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
+---
+
+---
+## Cursor Automation Demo
+marker=CURSOR_UI_EDIT_run_1772039938982_hpfbdi
+- Edited inside Cursor UI (not shell).
+- Protected by Approval/Resume for openclaw_act.
+- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
+---
+
+---
+## Cursor Automation Demo
+marker=CURSOR_UI_EDIT_run_1772040490407_n3dp7l
+- Edited inside Cursor UI (not shell).
+- Protected by Approval/Resume for openclaw_act.
+---
+---
+## Cursor Automation Demo
+marker=CURSOR_UI_EDIT_run_1772040567645_ctgpkf
+- Edited inside Cursor UI (not shell).
+- Protected by Approval/Resume for openclaw_act.
+---

@@ -58,13 +58,39 @@ export async function executor(step: PlanStep, projectRoot: string): Promise<Ste
     if (tool === "file_read") {
       const filePath = step.inputs?.path ?? "README.md";
       const out = await fileRead(projectRoot, filePath);
-      logSkill("file_read", { path: filePath }, out.ok ? { ...out, content: (out.content ?? "").slice(0, 200) } : out);
+      logSkill("file_read", { path: filePath }, out);
       continue;
     }
 
     if (tool === "shell_run") {
       const raw = step.inputs?.command ?? "pwd";
-      const commands = raw === "__AUTO_SELF_CHECK__" ? [await chooseSelfCheckCommand(projectRoot)] : [raw];
+      let commands: string[] = [raw];
+
+      if (raw === "__AUTO_SELF_CHECK__") {
+        commands = [await chooseSelfCheckCommand(projectRoot)];
+      }
+
+      if (raw === "__DEBUG_README_DIAG__") {
+        const abs = "/Users/William/Projects/multi-agent-openclaw/README.md";
+        commands = [
+          "pwd",
+          "ls",
+          `ls -la ${abs}`,
+          `stat -f \"%N %z bytes mtime=%Sm\" ${abs}`,
+          `tail -n 60 ${abs}`,
+          `grep -n \"CURSOR_UI_EDIT_\" ${abs} || true`,
+        ];
+      }
+
+      if (raw === "__DEBUG_POST_WRITE__") {
+        const abs = "/Users/William/Projects/multi-agent-openclaw/README.md";
+        const marker = step.inputs?.marker ?? "CURSOR_UI_EDIT_";
+        commands = [
+          `stat -f \"%N %z bytes mtime=%Sm\" ${abs}`,
+          `tail -n 80 ${abs}`,
+          `grep -n \"marker=${marker}\" ${abs} || true`,
+        ];
+      }
 
       for (const command of commands) {
         const out = await shellRun(command, projectRoot);

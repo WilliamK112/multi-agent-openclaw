@@ -25,7 +25,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
   }
 }
 
-export async function qa(projectRoot: string, goal = ""): Promise<QAResult> {
+export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QAResult> {
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -41,10 +41,15 @@ export async function qa(projectRoot: string, goal = ""): Promise<QAResult> {
     "OPENCLAW_DEMO file exists": await exists(demoPath),
     "OPENCLAW_DEMO contains marker": await containsText(demoPath, "OPENCLAW_DEMO"),
     "README has Cursor Automation Demo title": await containsText(readmePath, "## Cursor Automation Demo"),
-    "README has CodePilot GUI line": await containsText(readmePath, "This run was triggered from CodePilot GUI"),
-    "README has approval line": await containsText(readmePath, "openclaw_act executes only after Approval/Resume"),
-    "README has TEST_OUTPUT TODO line": await containsText(readmePath, "Next step: run npm test and save output to docs/TEST_OUTPUT.txt (TODO)"),
+    "README has edited-in-UI line": await containsText(readmePath, "Edited inside Cursor UI (not shell)."),
+    "README has approval line": await containsText(readmePath, "Protected by Approval/Resume for openclaw_act."),
+    "README has next-step line": await containsText(readmePath, "Next: run real tests and save output to docs/TEST_OUTPUT.txt."),
   };
+
+  if (goal.toLowerCase().includes("cursor readme demo")) {
+    const marker = `CURSOR_UI_EDIT_${runId}`;
+    checks[`README contains marker=${marker}`] = await containsText(readmePath, `marker=${marker}`);
+  }
 
   if (goal.toLowerCase().includes("test output demo")) {
     const testPath = path.join(projectRoot, "docs/TEST_OUTPUT.txt");

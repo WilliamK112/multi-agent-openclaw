@@ -16,7 +16,8 @@ type Action =
   | { kind: "gateway_status" }
   | { kind: "dashboard" }
   | { kind: "cursor_open_project" }
-  | { kind: "cursor_append_readme_demo" }
+  | { kind: "cursor_append_readme_demo"; marker: string }
+  | { kind: "cursor_debug_write_marker"; marker: string }
   | { kind: "demo_create_file"; marker: string };
 
 function run(cmd: string): Promise<{ ok: boolean; stdout: string; stderr: string; error?: string }> {
@@ -40,7 +41,14 @@ function parseInstruction(instruction: string): Action | null {
   if (body === "gateway status") return { kind: "gateway_status" };
   if (body === "dashboard") return { kind: "dashboard" };
   if (body === "cursor_open_project") return { kind: "cursor_open_project" };
-  if (body === "cursor_append_readme_demo") return { kind: "cursor_append_readme_demo" };
+  if (body.startsWith("cursor_append_readme_demo")) {
+    const marker = body.slice("cursor_append_readme_demo".length).trim() || "CURSOR_UI_EDIT_UNKNOWN";
+    return { kind: "cursor_append_readme_demo", marker };
+  }
+  if (body.startsWith("cursor_debug_write_marker")) {
+    const marker = body.slice("cursor_debug_write_marker".length).trim() || "CURSOR_UI_EDIT_UNKNOWN";
+    return { kind: "cursor_debug_write_marker", marker };
+  }
   if (body.startsWith("demo_create_file")) {
     const marker = body.slice("demo_create_file".length).trim() || "OPENCLAW_DEMO";
     return { kind: "demo_create_file", marker };
@@ -105,46 +113,98 @@ export async function openclawAct(instruction: string): Promise<OpenClawActResul
   if (action.kind === "cursor_open_project") {
     const projectRoot = process.cwd();
     const out = await run(`open -a Cursor ${JSON.stringify(projectRoot)}`);
-    const focus = await run(`osascript -e 'tell application "Cursor" to activate'`);
+    const script = [
+      'tell application "Cursor" to activate',
+      'delay 0.5',
+      'tell application "System Events"',
+      '  keystroke "p" using command down',
+      '  delay 0.2',
+      '  keystroke "README.md"',
+      '  key code 36',
+      'end tell',
+    ];
+    const cmd = script.map((line) => `-e ${JSON.stringify(line)}`).join(" ");
+    const focus = await run(`osascript ${cmd}`);
     const ok = out.ok && focus.ok;
     return {
       ok,
       instruction,
       mode: "openclaw-cli",
-      output: summarize(`Cursor project opened: ${projectRoot}`),
+      output: summarize(`Cursor focused and README opened in project: ${projectRoot}`),
       stderr: summarize(`${out.stderr}\n${focus.stderr}`),
       error: ok ? undefined : out.error || focus.error,
     };
   }
 
-  if (action.kind === "cursor_append_readme_demo") {
+  if (action.kind === "cursor_append_readme_demo" || action.kind === "cursor_debug_write_marker") {
     const readmePath = path.resolve(process.cwd(), "README.md");
-    const section = [
-      "",
-      "## Cursor Automation Demo",
-      "- This run was triggered from CodePilot GUI (/agent or /runs).",
-      "- openclaw_act executes only after Approval/Resume.",
-      "- Next step: run npm test and save output to docs/TEST_OUTPUT.txt (TODO)",
-      "",
-    ].join("\n");
-
-    let current = "";
-    try {
-      current = await fs.readFile(readmePath, "utf8");
-    } catch {
-      current = "";
+    const openOut = await run(`open -a Cursor ${JSON.stringify(readmePath)}`);
+    if (!openOut.ok) {
+      return {
+        ok: false,
+        instruction,
+        mode: "openclaw-cli",
+        output: "",
+        stderr: summarize(openOut.stderr),
+        error: openOut.error,
+      };
     }
 
-    if (!current.includes("## Cursor Automation Demo")) {
-      await fs.writeFile(readmePath, `${current.replace(/\s*$/, "")}\n${section}`, "utf8");
+    const lines = action.kind === "cursor_debug_write_marker"
+      ? [
+          "---",
+          "## Cursor Automation Demo",
+          `marker=${action.marker}`,
+          "- Edited inside Cursor UI (not shell).",
+          "- Protected by Approval/Resume for openclaw_act.",
+          "---",
+        ]
+      : [
+          "---",
+          "## Cursor Automation Demo",
+          `marker=${action.marker}`,
+          "- Edited inside Cursor UI (not shell).",
+          "- Protected by Approval/Resume for openclaw_act.",
+          "- Next: run real tests and save output to docs/TEST_OUTPUT.txt.",
+          "---",
+        ];
+
+    const script = [
+      'tell application "Cursor" to activate',
+      'delay 0.5',
+      'tell application "System Events"',
+      '  keystroke "p" using command down',
+      '  delay 0.2',
+      `  keystroke "${readmePath.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+      '  key code 36',
+      '  delay 0.4',
+      '  key code 125 using command down',
+      '  key code 36',
+      'end tell',
+    ];
+
+    for (const line of lines) {
+      const escaped = line.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      script.push('delay 0.08');
+      script.push('tell application "System Events"');
+      script.push(`  keystroke "${escaped}"`);
+      script.push('  key code 36');
+      script.push('end tell');
     }
 
-    const out = await run(`open -a Cursor ${JSON.stringify(readmePath)}`);
+    script.push('tell application "System Events"');
+    script.push('  keystroke "s" using command down');
+    script.push('  delay 0.1');
+    script.push('  keystroke "s" using command down');
+    script.push('end tell');
+
+    const cmd = script.map((line) => `-e ${JSON.stringify(line)}`).join(" ");
+    const out = await run(`osascript ${cmd}`);
     return {
       ok: out.ok,
       instruction,
       mode: "openclaw-cli",
-      output: summarize(`README updated with Cursor Automation Demo at ${readmePath}`),
+      output: summarize(`README edited in Cursor UI and saved at ${readmePath}`),
       stderr: summarize(out.stderr),
       error: out.error,
     };

@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 
-const ALLOWLIST = new Set(["pwd", "ls", "cat", "npm", "node", "echo", "git", "npx", "tsc"]);
+const ALLOWLIST = new Set(["pwd", "ls", "cat", "npm", "node", "echo", "git", "npx", "tsc", "stat", "tail", "grep", "true"]);
 
 export type ShellRunResult = {
   ok: boolean;
