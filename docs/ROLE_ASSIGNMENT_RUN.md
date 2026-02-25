@@ -1,0 +1,1 @@
+Role assignment phase-1 run artifact.

@@ -258,6 +258,39 @@ function fakeResponse(req: LLMRequest): LLMResponse {
     };
   }
 
+  if (cleanGoal.toLowerCase().includes("phase 1 role assignment")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Write run config snapshot artifact",
+            tools: ["file_write"],
+            success_criteria: "docs/ROLE_ASSIGNMENT_RUN.md exists",
+            inputs: { path: "docs/ROLE_ASSIGNMENT_RUN.md", content: "Role assignment phase-1 run artifact." },
+          },
+          {
+            id: "step-2",
+            objective: "Run lightweight shell verification",
+            tools: ["shell_run"],
+            success_criteria: "pwd executes successfully",
+            inputs: { command: "pwd" },
+          },
+          {
+            id: "step-3",
+            objective: "Read role assignment artifact",
+            tools: ["file_read"],
+            success_criteria: "artifact readable",
+            inputs: { path: "docs/ROLE_ASSIGNMENT_RUN.md" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   if (cleanGoal.toLowerCase().includes("test output demo")) {
     return {
       text: JSON.stringify({

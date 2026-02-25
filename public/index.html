@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>multi-agent-openclaw</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #0f0f0f;
+      color: #e4e4e7;
+      line-height: 1.5;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
+    .form-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #3f3f46;
+      border-radius: 8px;
+      background: #18181b;
+      color: #e4e4e7;
+      font-size: 1rem;
+    }
+    input[type="text"]::placeholder { color: #71717a; }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary {
+      background: #6366f1;
+      color: white;
+    }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-success {
+      background: #22c55e;
+      color: white;
+    }
+    .btn-success:hover { background: #16a34a; }
+    .role-board {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .panel {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .panel h3 { margin: 0 0 10px; font-size: 0.95rem; }
+    .agent-chip {
+      display: inline-block;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin: 4px 6px 0 0;
+      font-size: 0.8rem;
+      cursor: grab;
+    }
+    .roles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .role-box {
+      border: 1px dashed #3f3f46;
+      border-radius: 8px;
+      padding: 10px;
+      min-height: 86px;
+      background: #101013;
+    }
+    .role-box.dragover { border-color: #6366f1; background: #151524; }
+    .role-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.82rem; }
+    .clear-btn { background:#3f3f46; color:#fff; border:none; border-radius:6px; padding:2px 8px; font-size:0.72rem; cursor:pointer; }
+    .json-preview { font-family: ui-monospace, monospace; font-size: 0.75rem; background:#09090b; padding:10px; border-radius:6px; white-space:pre-wrap; margin-top:10px; }
+    .runs { margin-top: 32px; }
+    .run-card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .run-card:hover { border-color: #3f3f46; }
+    .run-card.selected { border-color: #6366f1; }
+    .run-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .run-goal { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-status {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .run-status.queued { background: #27272a; color: #a1a1aa; }
+    .run-status.running { background: #1e3a5f; color: #93c5fd; }
+    .run-status.needs_approval { background: #422006; color: #fcd34d; }
+    .run-status.done { background: #14532d; color: #86efac; }
+    .run-status.error { background: #450a0a; color: #fca5a5; }
+    .run-meta { font-size: 0.85rem; color: #71717a; margin-top: 8px; }
+    .detail-panel {
+      margin-top: 24px;
+      padding: 20px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+    }
+    .detail-panel h3 { margin: 0 0 16px; font-size: 1rem; }
+    .detail-actions { margin-bottom: 16px; }
+    .logs {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      background: #09090b;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .empty { color: #71717a; text-align: center; padding: 48px 24px; }
+    .error-msg { color: #fca5a5; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>multi-agent-openclaw</h1>
+    <div class="form-row">
+      <input type="text" id="goal" placeholder="Enter your goal (e.g. Build a multi-agent system skeleton)" />
+      <button class="btn-primary" id="submit">Run</button>
+    </div>
+
+    <div class="role-board">
+      <div class="panel">
+        <h3>Available Agents (drag)</h3>
+        <div id="available-agents"></div>
+      </div>
+      <div class="panel">
+        <h3>Role Assignment</h3>
+        <div class="roles-grid" id="roles-grid"></div>
+        <div class="json-preview" id="role-json-preview"></div>
+      </div>
+    </div>
+
+    <div class="runs">
+      <div id="runs-list"></div>
+      <div id="detail-panel" class="detail-panel" style="display: none;">
+        <h3>Run details</h3>
+        <div id="detail-actions" class="detail-actions"></div>
+        <div id="detail-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin;
+    let selectedRunId = null;
+    let pollInterval = null;
+
+    const AGENTS = [
+      { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
+      { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini' },
+      { id: 'anthropic:sonnet', label: 'anthropic:sonnet' },
+      { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）' },
+      { id: 'none', label: 'none（空）' },
+    ];
+    const ROLE_RULES = {
+      main: { multi: false, title: 'Main' },
+      research: { multi: false, title: 'Research' },
+      executor: { multi: false, title: 'Executor' },
+      qa: { multi: false, title: 'QA' },
+      reviewer: { multi: true, title: 'Reviewer' },
+    };
+    let roleAssignments = { main: '', research: '', executor: '', qa: '', reviewer: [] };
+
+    const goalInput = document.getElementById('goal');
+    const submitBtn = document.getElementById('submit');
+    const runsList = document.getElementById('runs-list');
+    const detailPanel = document.getElementById('detail-panel');
+    const availableAgentsEl = document.getElementById('available-agents');
+    const rolesGridEl = document.getElementById('roles-grid');
+    const roleJsonPreviewEl = document.getElementById('role-json-preview');
+    const detailActions = document.getElementById('detail-actions');
+    const detailContent = document.getElementById('detail-content');
+
+    async function fetchRuns() {
+      const res = await fetch(`${API}/runs?limit=50`);
+      if (!res.ok) throw new Error('Failed to fetch runs');
+      return res.json();
+    }
+
+    async function fetchRun(id) {
+      const res = await fetch(`${API}/runs/${id}`);
+      if (!res.ok) throw new Error('Failed to fetch run');
+      return res.json();
+    }
+
+    async function createRun(goal, roleAssignmentsPayload) {
+      const payload = { goal };
+      if (roleAssignmentsPayload) payload.roleAssignments = roleAssignmentsPayload;
+      const res = await fetch(`${API}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function approveRun(runId) {
+      const res = await fetch(`${API}/runs/${runId}/approve`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    function statusClass(s) {
+      return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
+    }
+
+    function assignmentPayload() {
+      return {
+        main: roleAssignments.main || 'none',
+        research: roleAssignments.research || 'none',
+        executor: roleAssignments.executor || 'none',
+        qa: roleAssignments.qa || 'none',
+        reviewer: Array.isArray(roleAssignments.reviewer) && roleAssignments.reviewer.length ? roleAssignments.reviewer : ['none'],
+      };
+    }
+
+    function renderRoleJsonPreview() {
+      roleJsonPreviewEl.textContent = JSON.stringify(assignmentPayload(), null, 2);
+    }
+
+    function renderAvailableAgents() {
+      availableAgentsEl.innerHTML = AGENTS.map(a => `<span class="agent-chip" draggable="true" data-agent-id="${a.id}" title="${a.label}">${a.id}</span>`).join('');
+      availableAgentsEl.querySelectorAll('.agent-chip').forEach(el => {
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', el.dataset.agentId);
+        });
+      });
+    }
+
+    function roleValueText(role) {
+      const v = roleAssignments[role];
+      if (Array.isArray(v)) return v.length ? v.join(', ') : 'none';
+      return v || 'none';
+    }
+
+    function clearRole(role) {
+      roleAssignments[role] = ROLE_RULES[role].multi ? [] : '';
+      renderRoles();
+      renderRoleJsonPreview();
+    }
+
+    function applyDrop(role, agentId) {
+      if (!agentId) return;
+      if (ROLE_RULES[role].multi) {
+        const cur = Array.isArray(roleAssignments[role]) ? roleAssignments[role] : [];
+        if (!cur.includes(agentId)) cur.push(agentId);
+        roleAssignments[role] = cur;
+      } else {
+        roleAssignments[role] = agentId;
+      }
+      renderRoles();
+      renderRoleJsonPreview();
+    }
+
+    function renderRoles() {
+      rolesGridEl.innerHTML = Object.entries(ROLE_RULES).map(([key, meta]) => `
+        <div class="role-box" data-role="${key}">
+          <div class="role-head">
+            <span>${meta.title}</span>
+            <button class="clear-btn" data-clear-role="${key}">Clear</button>
+          </div>
+          <div>${escapeHtml(roleValueText(key))}</div>
+        </div>
+      `).join('');
+
+      rolesGridEl.querySelectorAll('.clear-btn').forEach(btn => {
+        btn.addEventListener('click', () => clearRole(btn.dataset.clearRole));
+      });
+
+      rolesGridEl.querySelectorAll('.role-box').forEach(box => {
+        box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('dragover'); });
+        box.addEventListener('dragleave', () => box.classList.remove('dragover'));
+        box.addEventListener('drop', (e) => {
+          e.preventDefault();
+          box.classList.remove('dragover');
+          const agentId = e.dataTransfer.getData('text/plain');
+          applyDrop(box.dataset.role, agentId);
+        });
+      });
+    }
+
+    function renderRuns(runs) {
+      if (!runs.length) {
+        runsList.innerHTML = '<div class="empty">No runs yet. Enter a goal and click Run.</div>';
+        return;
+      }
+      runsList.innerHTML = runs.map(r => `
+        <div class="run-card ${r.id === selectedRunId ? 'selected' : ''}" data-id="${r.id}">
+          <div class="run-header">
+            <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
+            <span class="run-status ${statusClass(r.status)}">${r.status}</span>
+          </div>
+          <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(String(r.roleAssignments?.research ?? 'none'))}</div>
+        </div>
+      `).join('');
+      runsList.querySelectorAll('.run-card').forEach(el => {
+        el.addEventListener('click', () => selectRun(el.dataset.id));
+      });
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function renderDetail(run) {
+      detailPanel.style.display = 'block';
+      let actionsHtml = '';
+      if (run.status === 'needs_approval' && run.pendingStepId) {
+        actionsHtml = `<button class="btn-success" id="approve-btn">Approve step: ${run.pendingStepId}</button>`;
+      }
+      detailActions.innerHTML = actionsHtml;
+      if (actionsHtml) {
+        document.getElementById('approve-btn').addEventListener('click', async () => {
+          try {
+            await approveRun(run.id);
+            refresh();
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      }
+
+      let content = '';
+      if (run.error) content += `<div class="error-msg">${escapeHtml(run.error)}</div>`;
+      if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
+      if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
+      content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
+      detailContent.innerHTML = content;
+    }
+
+    async function selectRun(id) {
+      selectedRunId = id;
+      const run = await fetchRun(id);
+      renderDetail(run);
+      renderRuns(await fetchRuns());
+    }
+
+    async function refresh() {
+      const runs = await fetchRuns();
+      renderRuns(runs);
+      if (selectedRunId) {
+        const run = await fetchRun(selectedRunId);
+        renderDetail(run);
+      }
+    }
+
+    function startPolling() {
+      if (pollInterval) return;
+      pollInterval = setInterval(refresh, 2000);
+    }
+
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      const goal = goalInput.value.trim();
+      if (!goal) {
+        alert('Please enter a goal');
+        return;
+      }
+      try {
+        submitBtn.disabled = true;
+        const { runId } = await createRun(goal, assignmentPayload());
+        goalInput.value = '';
+        selectedRunId = runId;
+        startPolling();
+        await refresh();
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    goalInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitBtn.click();
+    });
+
+    // Initial load
+    renderAvailableAgents();
+    renderRoles();
+    renderRoleJsonPreview();
+
+    fetchRuns().then(runs => {
+      renderRuns(runs);
+      const hasActive = runs.some(r => r.status === 'queued' || r.status === 'running' || r.status === 'needs_approval');
+      if (hasActive) startPolling();
+    }).catch(() => {
+      runsList.innerHTML = '<div class="empty error-msg">Cannot connect to API. Is the server running? Run: npm run dev:server</div>';
+    });
+  </script>
+</body>
+</html>

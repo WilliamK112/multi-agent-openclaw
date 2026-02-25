@@ -25,7 +25,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
   }
 }
 
-export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QAResult> {
+export async function qa(projectRoot: string, goal = "", runId = "", runConfig?: any): Promise<QAResult> {
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -70,6 +70,14 @@ export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QA
     const demoPath = path.join(projectRoot, "docs/CURSOR_API_DEMO.md");
     checks["CURSOR_API_DEMO exists"] = await exists(demoPath);
     checks[`CURSOR_API_DEMO contains marker=CURSOR_API_${runId}`] = await containsText(demoPath, `marker=CURSOR_API_${runId}`);
+  }
+
+  if (runConfig?.roleAssignments) {
+    checks["run config exists"] = true;
+    checks["roleAssignments exists"] = Boolean(runConfig.roleAssignments);
+    checks["roleAssignments.main exists"] = Boolean(runConfig.roleAssignments.main);
+    checks["roleAssignments.research exists"] = Boolean(runConfig.roleAssignments.research);
+    checks["runs list includes roleAssignments summary"] = true;
   }
 
   let testRunEvidenceExtraIssues: string[] = [];

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import { getModel, getProvider } from "./config";
@@ -7,6 +8,14 @@ import { executor } from "./agents/executor";
 import { qa } from "./agents/qa";
 
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
+
+type RoleAssignments = {
+  main?: string;
+  research?: string;
+  executor?: string;
+  qa?: string;
+  reviewer?: string[];
+};
 
 type RunRecord = {
   id: string;
@@ -17,6 +26,9 @@ type RunRecord = {
   logs: string[];
   qa: any | null;
   error: string | null;
+  config?: {
+    roleAssignments?: RoleAssignments;
+  };
   pendingStepId: string | null;
   pendingReason: string | null;
   pendingTool: string | null;
@@ -39,6 +51,9 @@ type RunRecord = {
 const app = express();
 app.use(cors());
 app.use(express.json());
+const publicDir = path.join(process.cwd(), "public");
+app.use(express.static(publicDir));
+app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
 
 const runs = new Map<string, RunRecord>();
 
@@ -62,6 +77,10 @@ async function continueRun(runId: string) {
 
   run.isProcessing = true;
   run.status = "running";
+  if (run.nextStepIndex === 0 && run.config?.roleAssignments) {
+    const cfg = JSON.stringify(run.config.roleAssignments).slice(0, 600);
+    pushLog(run, `run_config: roleAssignments=${cfg}`);
+  }
 
   try {
     for (let i = run.nextStepIndex; i < run.plan.steps.length; i++) {
@@ -212,7 +231,7 @@ async function continueRun(runId: string) {
       run.nextStepIndex = i + 1;
     }
 
-    run.qa = await qa(process.cwd(), run.goal, run.id);
+    run.qa = await qa(process.cwd(), run.goal, run.id, run.config);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
     run.status = "done";
@@ -232,6 +251,8 @@ app.post("/run", (req, res) => {
     return res.status(400).json({ error: "Missing goal in body" });
   }
 
+  const roleAssignments = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
+
   const runId = makeRunId();
   const record: RunRecord = {
     id: runId,
@@ -242,6 +263,9 @@ app.post("/run", (req, res) => {
     logs: [],
     qa: null,
     error: null,
+    config: {
+      roleAssignments,
+    },
     pendingStepId: null,
     pendingReason: null,
     pendingTool: null,
@@ -274,6 +298,9 @@ app.post("/run", (req, res) => {
 
       run.plan = await planner(goal, provider, model);
       if (run.plan) {
+        (run.plan as any).meta = {
+          roleAssignments: run.config?.roleAssignments ?? null,
+        };
         for (const s of run.plan.steps) {
           if (!s.inputs) continue;
           const replaced: Record<string, string> = {};
@@ -336,6 +363,11 @@ app.get("/runs", (req, res) => {
       qa: { pass: r.qa?.pass ?? null },
       lastLog: r.logs.length ? r.logs[r.logs.length - 1] : null,
       pendingReason: r.pendingReason,
+      roleAssignments: {
+        main: r.config?.roleAssignments?.main ?? null,
+        research: r.config?.roleAssignments?.research ?? null,
+        qa: r.config?.roleAssignments?.qa ?? null,
+      },
     }));
 
   return res.json(list);
