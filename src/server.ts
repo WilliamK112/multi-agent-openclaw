@@ -17,7 +17,14 @@ type RunRecord = {
 };
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
+}));
 app.use(express.json());
 
 const runs = new Map<string, RunRecord>();
@@ -52,7 +59,6 @@ app.post("/run", (req, res) => {
     if (!current) return;
 
     current.status = "running";
-    current.logs.push("planner:start");
 
     try {
       const result = await run(goal, {
@@ -93,6 +99,23 @@ app.post("/run", (req, res) => {
       failed.logs.push("run:error");
     }
   })();
+});
+
+app.get("/runs", (req, res) => {
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const list = Array.from(runs.values())
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit)
+    .map((r) => ({
+      id: r.id,
+      goal: r.goal,
+      createdAt: r.createdAt,
+      status: r.status,
+      qa: { pass: r.qa?.pass ?? null },
+      lastLog: r.logs.length ? r.logs[r.logs.length - 1] : null,
+    }));
+
+  return res.json(list);
 });
 
 app.get("/runs/:runId", (req, res) => {
