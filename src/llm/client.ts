@@ -55,9 +55,44 @@ async function callGemini(req: LLMRequest): Promise<LLMResponse> {
 
 function fakeResponse(req: LLMRequest): LLMResponse {
   const userGoal = req.messages.find((m) => m.role === "user")?.content ?? "unknown";
+  const cleanGoal = userGoal.replace(/^Goal:\s*/i, "").split("\n")[0];
+
+  if (cleanGoal.toLowerCase().includes("cursor readme demo")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Open/focus Cursor on multi-agent-openclaw project",
+            tools: ["openclaw_act"],
+            success_criteria: "Cursor is opened and focused on project",
+            inputs: { instruction: "openclaw: cursor_open_project" },
+          },
+          {
+            id: "step-2",
+            objective: "Append Cursor Automation Demo section to README via openclaw_act",
+            tools: ["openclaw_act"],
+            success_criteria: "README contains Cursor Automation Demo section",
+            inputs: { instruction: "openclaw: cursor_append_readme_demo" },
+          },
+          {
+            id: "step-3",
+            objective: "Read README to verify section",
+            tools: ["file_read"],
+            success_criteria: "README content can be read with expected section",
+            inputs: { path: "README.md" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   return {
     text: JSON.stringify({
-      goal: userGoal.replace(/^Goal:\s*/i, "").split("\n")[0],
+      goal: cleanGoal,
       steps: [
         {
           id: "step-1",

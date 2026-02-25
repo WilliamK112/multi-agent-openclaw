@@ -33,6 +33,35 @@ const planSchema = z.object({
 });
 
 function fallbackPlan(goal: string): Plan {
+  if (goal.toLowerCase().includes("cursor readme demo")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Open/focus Cursor on multi-agent-openclaw project",
+          tools: ["openclaw_act"],
+          success_criteria: "Cursor is opened and focused on project",
+          inputs: { instruction: "openclaw: cursor_open_project" },
+        },
+        {
+          id: "step-2",
+          objective: "Append Cursor Automation Demo section to README via openclaw_act",
+          tools: ["openclaw_act"],
+          success_criteria: "README contains Cursor Automation Demo section",
+          inputs: { instruction: "openclaw: cursor_append_readme_demo" },
+        },
+        {
+          id: "step-3",
+          objective: "Read README to verify section",
+          tools: ["file_read"],
+          success_criteria: "README content can be read with expected section",
+          inputs: { path: "README.md" },
+        },
+      ],
+    };
+  }
+
   return {
     goal,
     steps: [
