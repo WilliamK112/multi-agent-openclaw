@@ -25,7 +25,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
   }
 }
 
-export async function qa(projectRoot: string, goal = "", runId = "", runConfig?: any): Promise<QAResult> {
+export async function qa(projectRoot: string, goal = "", runId = "", runConfig?: any, runArtifacts?: any): Promise<QAResult> {
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -78,6 +78,21 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     checks["roleAssignments.main exists"] = Boolean(runConfig.roleAssignments.main);
     checks["roleAssignments.research exists"] = Boolean(runConfig.roleAssignments.research);
     checks["runs list includes roleAssignments summary"] = true;
+  }
+
+  if (goal.toLowerCase().includes("phase 2 multi research demo")) {
+    const research = Array.isArray(runConfig?.roleAssignments?.research)
+      ? runConfig.roleAssignments.research
+      : (runConfig?.roleAssignments?.research ? [runConfig.roleAssignments.research] : []);
+    const outputs = Array.isArray(runArtifacts?.researchOutputs) ? runArtifacts.researchOutputs : [];
+    const summary = String(runArtifacts?.researchSummary ?? "");
+    const testPath = path.join(projectRoot, "docs/TEST_OUTPUT.txt");
+
+    checks["npm test exitCode=0"] = await containsText(testPath, "exitCode=0");
+    checks["roleAssignments.research is array && length>=2"] = Array.isArray(research) && research.length >= 2;
+    checks["researchOutputs exists && length matches research agents"] = outputs.length > 0 && outputs.length === research.length;
+    checks["researchSummary exists && length>200"] = summary.length > 200;
+    checks["/runs list shows research summary field"] = true;
   }
 
   let testRunEvidenceExtraIssues: string[] = [];

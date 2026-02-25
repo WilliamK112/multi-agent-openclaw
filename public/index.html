@@ -183,6 +183,8 @@
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
+      { id: 'deepseek:local', label: 'deepseek:local（本地）' },
+      { id: 'tavily-search:tool', label: 'tavily-search:tool（web search）' },
       { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini' },
       { id: 'anthropic:sonnet', label: 'anthropic:sonnet' },
       { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）' },
@@ -190,12 +192,12 @@
     ];
     const ROLE_RULES = {
       main: { multi: false, title: 'Main' },
-      research: { multi: false, title: 'Research' },
+      research: { multi: true, title: 'Research' },
       executor: { multi: false, title: 'Executor' },
-      qa: { multi: false, title: 'QA' },
+      qa: { multi: true, title: 'QA' },
       reviewer: { multi: true, title: 'Reviewer' },
     };
-    let roleAssignments = { main: '', research: '', executor: '', qa: '', reviewer: [] };
+    let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
 
     const goalInput = document.getElementById('goal');
     const submitBtn = document.getElementById('submit');
@@ -250,9 +252,9 @@
     function assignmentPayload() {
       return {
         main: roleAssignments.main || 'none',
-        research: roleAssignments.research || 'none',
+        research: Array.isArray(roleAssignments.research) && roleAssignments.research.length ? roleAssignments.research : ['none'],
         executor: roleAssignments.executor || 'none',
-        qa: roleAssignments.qa || 'none',
+        qa: Array.isArray(roleAssignments.qa) && roleAssignments.qa.length ? roleAssignments.qa : ['none'],
         reviewer: Array.isArray(roleAssignments.reviewer) && roleAssignments.reviewer.length ? roleAssignments.reviewer : ['none'],
       };
     }
@@ -295,19 +297,40 @@
       renderRoleJsonPreview();
     }
 
-    function renderRoles() {
-      rolesGridEl.innerHTML = Object.entries(ROLE_RULES).map(([key, meta]) => `
-        <div class="role-box" data-role="${key}">
-          <div class="role-head">
-            <span>${meta.title}</span>
-            <button class="clear-btn" data-clear-role="${key}">Clear</button>
-          </div>
-          <div>${escapeHtml(roleValueText(key))}</div>
-        </div>
-      `).join('');
+    function removeRoleAgent(role, agentId) {
+      if (!ROLE_RULES[role].multi) {
+        roleAssignments[role] = '';
+      } else {
+        const cur = Array.isArray(roleAssignments[role]) ? roleAssignments[role] : [];
+        roleAssignments[role] = cur.filter(x => x !== agentId);
+      }
+      renderRoles();
+      renderRoleJsonPreview();
+    }
 
-      rolesGridEl.querySelectorAll('.clear-btn').forEach(btn => {
+    function renderRoles() {
+      rolesGridEl.innerHTML = Object.entries(ROLE_RULES).map(([key, meta]) => {
+        const val = roleAssignments[key];
+        const chips = Array.isArray(val)
+          ? (val.length ? val.map(v => `<span class="agent-chip" style="cursor:default">${escapeHtml(v)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(v)}" class="clear-btn" style="margin-left:6px;padding:1px 5px;">x</button></span>`).join('') : '<span style="opacity:.65">none</span>')
+          : (val ? `<span class="agent-chip" style="cursor:default">${escapeHtml(val)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(val)}" class="clear-btn" style="margin-left:6px;padding:1px 5px;">x</button></span>` : '<span style="opacity:.65">none</span>');
+        return `
+          <div class="role-box" data-role="${key}">
+            <div class="role-head">
+              <span>${meta.title}</span>
+              <button class="clear-btn" data-clear-role="${key}">Clear</button>
+            </div>
+            <div>${chips}</div>
+          </div>
+        `;
+      }).join('');
+
+      rolesGridEl.querySelectorAll('.clear-btn[data-clear-role]').forEach(btn => {
         btn.addEventListener('click', () => clearRole(btn.dataset.clearRole));
+      });
+
+      rolesGridEl.querySelectorAll('button[data-remove-role]').forEach(btn => {
+        btn.addEventListener('click', () => removeRoleAgent(btn.dataset.removeRole, btn.dataset.removeAgent));
       });
 
       rolesGridEl.querySelectorAll('.role-box').forEach(box => {
@@ -333,7 +356,7 @@
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
             <span class="run-status ${statusClass(r.status)}">${r.status}</span>
           </div>
-          <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(String(r.roleAssignments?.research ?? 'none'))}</div>
+          <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -368,6 +391,7 @@
       let content = '';
       if (run.error) content += `<div class="error-msg">${escapeHtml(run.error)}</div>`;
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
+      if (run.artifacts) content += `<p><strong>Artifacts:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.artifacts, null, 2))}</pre>`;
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
       detailContent.innerHTML = content;

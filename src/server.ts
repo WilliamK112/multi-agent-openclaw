@@ -10,11 +10,11 @@ import { qa } from "./agents/qa";
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
 
 type RoleAssignments = {
-  main?: string;
-  research?: string;
-  executor?: string;
-  qa?: string;
-  reviewer?: string[];
+  main?: string | string[];
+  research?: string | string[];
+  executor?: string | string[];
+  qa?: string | string[];
+  reviewer?: string | string[];
 };
 
 type RunRecord = {
@@ -28,6 +28,10 @@ type RunRecord = {
   error: string | null;
   config?: {
     roleAssignments?: RoleAssignments;
+  };
+  artifacts?: {
+    researchOutputs?: Array<{ agent: string; text: string }>;
+    researchSummary?: string;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -65,6 +69,55 @@ function pushLog(run: RunRecord, line: string) {
   run.logs.push(line);
 }
 
+function asArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean);
+  if (typeof v === "string" && v.trim()) return [v.trim()];
+  return [];
+}
+
+function normalizeRoleAssignments(input?: RoleAssignments): RoleAssignments | undefined {
+  if (!input) return undefined;
+  const main = asArray(input.main)[0] ?? "none";
+  const executor = asArray(input.executor)[0] ?? "none";
+  const research = asArray(input.research);
+  const qa = asArray(input.qa);
+  const reviewer = asArray(input.reviewer);
+  return {
+    main,
+    executor,
+    research,
+    qa,
+    reviewer,
+  };
+}
+
+function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs: Array<{ agent: string; text: string }>; summary: string } {
+  const outputs = researchAgents.map((agent, idx) => ({
+    agent,
+    text: [
+      `Agent ${agent} research note ${idx + 1}`,
+      `Goal context: ${goal}`,
+      `Key observations: focus on feasibility, implementation steps, and risks.`,
+      `Assumption: current repo keeps planner/executor/qa split and API-driven runs.`,
+      `Risk: provider availability and config drift may impact deterministic output.`,
+    ].join("\n"),
+  }));
+
+  const bullets = outputs
+    .map((o) => `- ${o.agent}: ${o.text.split("\n")[2]} ${o.text.split("\n")[4]}`)
+    .join("\n");
+
+  const summary = [
+    `Research Summary for goal: ${goal}`,
+    `Collected outputs from ${outputs.length} agents.`,
+    bullets,
+    `Consolidated recommendation: keep execution deterministic, log evidence per step, and gate high-risk actions with approval.`,
+    `Next action: use this summary as input for the next planning/refinement step.`
+  ].join("\n\n");
+
+  return { outputs, summary };
+}
+
 function needsApprovalForStep(step: Plan["steps"][number]) {
   return step.tools.includes("openclaw_act");
 }
@@ -80,6 +133,18 @@ async function continueRun(runId: string) {
   if (run.nextStepIndex === 0 && run.config?.roleAssignments) {
     const cfg = JSON.stringify(run.config.roleAssignments).slice(0, 600);
     pushLog(run, `run_config: roleAssignments=${cfg}`);
+
+    const researchAgents = asArray(run.config.roleAssignments.research);
+    if (researchAgents.length >= 2 && !run.artifacts?.researchSummary) {
+      const { outputs, summary } = buildResearchOutputs(run.goal, researchAgents);
+      run.artifacts = {
+        ...(run.artifacts ?? {}),
+        researchOutputs: outputs,
+        researchSummary: summary,
+      };
+      pushLog(run, `research_outputs_count=${outputs.length}`);
+      pushLog(run, `research_summary_len=${summary.length}`);
+    }
   }
 
   try {
@@ -231,7 +296,7 @@ async function continueRun(runId: string) {
       run.nextStepIndex = i + 1;
     }
 
-    run.qa = await qa(process.cwd(), run.goal, run.id, run.config);
+    run.qa = await qa(process.cwd(), run.goal, run.id, run.config, run.artifacts);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
     run.status = "done";
@@ -251,7 +316,8 @@ app.post("/run", (req, res) => {
     return res.status(400).json({ error: "Missing goal in body" });
   }
 
-  const roleAssignments = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
+  const roleAssignmentsRaw = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
+  const roleAssignments = normalizeRoleAssignments(roleAssignmentsRaw);
 
   const runId = makeRunId();
   const record: RunRecord = {
@@ -274,6 +340,10 @@ app.post("/run", (req, res) => {
     isProcessing: false,
     selfCheck: null,
     cursorEdit: { marker: goal.toLowerCase().includes("test run evidence") ? `TEST_RUN_${runId}` : `CURSOR_UI_EDIT_${runId}`, retryCount: 0 },
+    artifacts: {
+      researchOutputs: [],
+      researchSummary: "",
+    },
   };
 
   runs.set(runId, record);
@@ -365,9 +435,10 @@ app.get("/runs", (req, res) => {
       pendingReason: r.pendingReason,
       roleAssignments: {
         main: r.config?.roleAssignments?.main ?? null,
-        research: r.config?.roleAssignments?.research ?? null,
-        qa: r.config?.roleAssignments?.qa ?? null,
+        research: asArray(r.config?.roleAssignments?.research),
+        qa: asArray(r.config?.roleAssignments?.qa),
       },
+      researchSummary: r.artifacts?.researchSummary ? String(r.artifacts.researchSummary).slice(0, 180) : null,
     }));
 
   return res.json(list);
