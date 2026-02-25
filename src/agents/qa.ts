@@ -72,6 +72,11 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     checks[`CURSOR_API_DEMO contains marker=CURSOR_API_${runId}`] = await containsText(demoPath, `marker=CURSOR_API_${runId}`);
   }
 
+  if (goal.toLowerCase().includes("word document") || goal.toLowerCase().includes("research this topic")) {
+    checks["article markdown exists"] = await exists(path.join(projectRoot, "docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md"));
+    checks["desktop docx exists"] = await exists("/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx");
+  }
+
   if (runConfig?.roleAssignments) {
     checks["run config exists"] = true;
     checks["roleAssignments exists"] = Boolean(runConfig.roleAssignments);

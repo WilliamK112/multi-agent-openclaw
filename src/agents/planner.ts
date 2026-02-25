@@ -290,6 +290,35 @@ function fallbackPlan(goal: string): Plan {
     };
   }
 
+  if (goal.toLowerCase().includes("word document") || goal.toLowerCase().includes("research this topic")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Generate English research article markdown from topic",
+          tools: ["shell_run"],
+          success_criteria: "docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md is created",
+          inputs: { command: "__WRITE_TOPIC_ARTICLE__", topic: goal },
+        },
+        {
+          id: "step-2",
+          objective: "Export markdown article to Word document on Desktop",
+          tools: ["shell_run"],
+          success_criteria: "Desktop docx exists",
+          inputs: { command: "__EXPORT_TOPIC_DOCX__" },
+        },
+        {
+          id: "step-3",
+          objective: "Read article file for verification",
+          tools: ["file_read"],
+          success_criteria: "article markdown readable",
+          inputs: { path: "docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md" },
+        },
+      ],
+    };
+  }
+
   if (goal.toLowerCase().includes("test output demo")) {
     return {
       goal,
@@ -349,7 +378,7 @@ function fallbackPlan(goal: string): Plan {
 
 export async function planner(goal: string, provider: LLMProvider, model: string): Promise<Plan> {
   const lower = goal.toLowerCase();
-  if (lower.includes("phase 1 role assignment") || lower.includes("phase 2 multi research demo") || lower.includes("phase 3a workflow builder demo") || lower.includes("stage 3") || lower.includes("test run evidence") || lower.includes("cursor readme demo") || lower.includes("test output demo") || lower.includes("[debug_")) {
+  if (lower.includes("phase 1 role assignment") || lower.includes("phase 2 multi research demo") || lower.includes("phase 3a workflow builder demo") || lower.includes("stage 3") || lower.includes("test run evidence") || lower.includes("cursor readme demo") || lower.includes("test output demo") || lower.includes("[debug_") || lower.includes("word document") || lower.includes("research this topic")) {
     return fallbackPlan(goal);
   }
 

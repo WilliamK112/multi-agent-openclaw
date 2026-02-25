@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { exec as cpExec } from "node:child_process";
 import { PlanStep } from "./planner";
 import { fileRead, fileWrite } from "../skills/files";
 import { shellRun } from "../skills/shell";
@@ -29,6 +30,18 @@ async function chooseSelfCheckCommand(projectRoot: string): Promise<string> {
   } catch {
     return "npm -v";
   }
+}
+
+function execCmd(command: string, cwd: string): Promise<{ ok: boolean; stdout: string; stderr: string; code: number }> {
+  return new Promise((resolve) => {
+    cpExec(command, { cwd, timeout: 30_000 }, (err, stdout, stderr) => {
+      if (err) {
+        resolve({ ok: false, stdout: stdout ?? "", stderr: stderr ?? "", code: Number((err as any).code ?? 1) });
+        return;
+      }
+      resolve({ ok: true, stdout: stdout ?? "", stderr: stderr ?? "", code: 0 });
+    });
+  });
 }
 
 export async function executor(step: PlanStep, projectRoot: string, runId = ""): Promise<StepExecution> {
@@ -125,6 +138,64 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
 
         const writeOut = await fileWrite(projectRoot, "docs/TEST_OUTPUT.txt", content);
         logSkill("file_write", { path: "docs/TEST_OUTPUT.txt", source: "npm test output" }, writeOut);
+        continue;
+      }
+
+      if (raw === "__WRITE_TOPIC_ARTICLE__") {
+        const topic = step.inputs?.topic ?? "Immigration enforcement cooperation with ICE";
+        const articlePath = "docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md";
+        const article = [
+          "# State/Local Cooperation with ICE: Focused Analysis",
+          "",
+          "## Topic",
+          String(topic),
+          "",
+          "## Executive Answer",
+          "State and local cooperation with ICE is often formally optional but practically shaped by legal risk, institutional incentives, and operational dependencies.",
+          "",
+          "## Mechanisms",
+          "- 287(g) agreements",
+          "- Detainers",
+          "- Fingerprint/database sharing",
+          "- Jail/transfer logistics",
+          "",
+          "## Public Safety Tradeoff",
+          "Narrowly scoped cooperation can improve targeting in serious cases, but broad operational spillover can reduce trust and shift enforcement burdens to local communities.",
+          "",
+          "## Sources",
+          "- https://www.ice.gov/identify-and-arrest/287g",
+          "- https://www.law.cornell.edu/uscode/text/8/1357",
+          "- https://www.law.cornell.edu/cfr/text/8/287.7",
+          "- https://www.ice.gov/secure-communities",
+          "- https://supreme.justia.com/cases/federal/us/521/898/",
+          "- https://www.nilc.org/issues/immigration-enforcement/local-enforcement-detainers/",
+          "",
+        ].join("\n");
+        const out = await fileWrite(projectRoot, articlePath, article);
+        logSkill("file_write", { path: articlePath, from: "topic" }, out);
+        continue;
+      }
+
+      if (raw === "__EXPORT_TOPIC_DOCX__") {
+        const script = [
+          "from docx import Document",
+          "from pathlib import Path",
+          "src=Path('/Users/William/Projects/multi-agent-openclaw/docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md')",
+          "out=Path('/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx')",
+          "text=src.read_text(encoding='utf-8')",
+          "doc=Document()",
+          "for line in text.splitlines():",
+          "    if line.startswith('# '): doc.add_heading(line[2:], level=1)",
+          "    elif line.startswith('## '): doc.add_heading(line[3:], level=2)",
+          "    elif line.startswith('### '): doc.add_heading(line[4:], level=3)",
+          "    elif line.strip()=='': doc.add_paragraph('')",
+          "    else: doc.add_paragraph(line)",
+          "doc.save(str(out))",
+          "print(out)",
+        ].join("\n");
+        const cmd = `python3 - <<'PY'\n${script}\nPY`;
+        const out = await execCmd(cmd, projectRoot);
+        logSkill("shell_run", { command: "python3 docx export" }, out);
         continue;
       }
 
