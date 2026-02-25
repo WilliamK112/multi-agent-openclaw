@@ -17,6 +17,14 @@ type RoleAssignments = {
   reviewer?: string | string[];
 };
 
+type WorkflowStage = {
+  id: string;
+  type: "research" | "synth" | "plan" | "execute" | "qa" | "review";
+  agents: string[];
+  mergePolicy: "none" | "summary" | "judge" | "vote";
+  notes?: string;
+};
+
 type RunRecord = {
   id: string;
   goal: string;
@@ -28,6 +36,7 @@ type RunRecord = {
   error: string | null;
   config?: {
     roleAssignments?: RoleAssignments;
+    workflowStages?: WorkflowStage[];
   };
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
@@ -89,6 +98,29 @@ function normalizeRoleAssignments(input?: RoleAssignments): RoleAssignments | un
     qa,
     reviewer,
   };
+}
+
+function normalizeWorkflowStages(input: any): WorkflowStage[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const allowedTypes = new Set(["research", "synth", "plan", "execute", "qa", "review"]);
+  const allowedMerge = new Set(["none", "summary", "judge", "vote"]);
+  const out: WorkflowStage[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const s = input[i] ?? {};
+    const id = String(s.id ?? `s${i + 1}`);
+    const typeRaw = String(s.type ?? "research");
+    const mergeRaw = String(s.mergePolicy ?? "none");
+    const type = (allowedTypes.has(typeRaw) ? typeRaw : "research") as WorkflowStage["type"];
+    const mergePolicy = (allowedMerge.has(mergeRaw) ? mergeRaw : "none") as WorkflowStage["mergePolicy"];
+    out.push({
+      id,
+      type,
+      agents: asArray(s.agents),
+      mergePolicy,
+      notes: s.notes ? String(s.notes) : undefined,
+    });
+  }
+  return out;
 }
 
 function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs: Array<{ agent: string; text: string }>; summary: string } {
@@ -318,6 +350,7 @@ app.post("/run", (req, res) => {
 
   const roleAssignmentsRaw = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
   const roleAssignments = normalizeRoleAssignments(roleAssignmentsRaw);
+  const workflowStages = normalizeWorkflowStages(req.body?.workflowStages);
 
   const runId = makeRunId();
   const record: RunRecord = {
@@ -331,6 +364,7 @@ app.post("/run", (req, res) => {
     error: null,
     config: {
       roleAssignments,
+      workflowStages,
     },
     pendingStepId: null,
     pendingReason: null,
@@ -370,6 +404,7 @@ app.post("/run", (req, res) => {
       if (run.plan) {
         (run.plan as any).meta = {
           roleAssignments: run.config?.roleAssignments ?? null,
+          workflowStages: run.config?.workflowStages ?? null,
         };
         for (const s of run.plan.steps) {
           if (!s.inputs) continue;
@@ -439,6 +474,13 @@ app.get("/runs", (req, res) => {
         qa: asArray(r.config?.roleAssignments?.qa),
       },
       researchSummary: r.artifacts?.researchSummary ? String(r.artifacts.researchSummary).slice(0, 180) : null,
+      workflowStagesSummary: (() => {
+        const stages = r.config?.workflowStages ?? [];
+        if (!Array.isArray(stages) || !stages.length) return null;
+        const first = stages[0]?.type ?? "?";
+        const last = stages[stages.length - 1]?.type ?? "?";
+        return `${stages.length} stages: ${first}→${last}`;
+      })(),
     }));
 
   return res.json(list);

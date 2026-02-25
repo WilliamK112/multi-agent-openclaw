@@ -80,6 +80,15 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     checks["runs list includes roleAssignments summary"] = true;
   }
 
+  if (Array.isArray(runConfig?.workflowStages) && runConfig.workflowStages.length > 0) {
+    checks["workflowStages exists"] = true;
+    checks["workflowStages is array && length>=1"] = Array.isArray(runConfig.workflowStages) && runConfig.workflowStages.length >= 1;
+    checks["each stage has id/type/agents/mergePolicy"] = runConfig.workflowStages.every((s: any) => s?.id && s?.type && Array.isArray(s?.agents) && s?.mergePolicy);
+    const submittedOrder = JSON.stringify(runConfig.workflowStages.map((s: any) => s.id));
+    const observedOrder = JSON.stringify(runConfig.workflowStages.map((s: any) => s.id));
+    checks["stage order preserved"] = submittedOrder === observedOrder;
+  }
+
   if (goal.toLowerCase().includes("phase 2 multi research demo")) {
     const research = Array.isArray(runConfig?.roleAssignments?.research)
       ? runConfig.roleAssignments.research

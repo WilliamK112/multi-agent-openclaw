@@ -154,7 +154,13 @@
       <button class="btn-primary" id="submit">Run</button>
     </div>
 
-    <div class="role-board">
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Mode</h3>
+      <label style="margin-right:12px;"><input type="radio" name="mode" value="roles" checked /> Role Assignment</label>
+      <label><input type="radio" name="mode" value="workflow" /> Workflow Builder</label>
+    </div>
+
+    <div class="role-board" id="role-board">
       <div class="panel">
         <h3>Available Agents (drag)</h3>
         <div id="available-agents"></div>
@@ -163,6 +169,19 @@
         <h3>Role Assignment</h3>
         <div class="roles-grid" id="roles-grid"></div>
         <div class="json-preview" id="role-json-preview"></div>
+      </div>
+    </div>
+
+    <div class="role-board" id="workflow-board" style="display:none;">
+      <div class="panel">
+        <h3>Available Agents (drag)</h3>
+        <div id="workflow-available-agents"></div>
+      </div>
+      <div class="panel">
+        <h3>Workflow Builder</h3>
+        <button class="clear-btn" id="add-stage-btn" style="margin-bottom:8px;">Add Stage</button>
+        <div id="workflow-stages"></div>
+        <div class="json-preview" id="workflow-json-preview"></div>
       </div>
     </div>
 
@@ -198,6 +217,12 @@
       reviewer: { multi: true, title: 'Reviewer' },
     };
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
+    let mode = 'roles';
+    let workflowStages = [
+      { id: 's1', type: 'research', agents: [], mergePolicy: 'none', notes: '' },
+      { id: 's2', type: 'synth', agents: [], mergePolicy: 'summary', notes: '' },
+      { id: 's3', type: 'qa', agents: [], mergePolicy: 'judge', notes: '' },
+    ];
 
     const goalInput = document.getElementById('goal');
     const submitBtn = document.getElementById('submit');
@@ -208,6 +233,12 @@
     const roleJsonPreviewEl = document.getElementById('role-json-preview');
     const detailActions = document.getElementById('detail-actions');
     const detailContent = document.getElementById('detail-content');
+    const roleBoardEl = document.getElementById('role-board');
+    const workflowBoardEl = document.getElementById('workflow-board');
+    const workflowAgentsEl = document.getElementById('workflow-available-agents');
+    const workflowStagesEl = document.getElementById('workflow-stages');
+    const workflowJsonPreviewEl = document.getElementById('workflow-json-preview');
+    const addStageBtn = document.getElementById('add-stage-btn');
 
     async function fetchRuns() {
       const res = await fetch(`${API}/runs?limit=50`);
@@ -345,6 +376,93 @@
       });
     }
 
+    function workflowPayload() {
+      return workflowStages.map(s => ({
+        id: s.id,
+        type: s.type,
+        agents: Array.isArray(s.agents) ? s.agents : [],
+        mergePolicy: s.mergePolicy,
+        notes: s.notes || ''
+      }));
+    }
+
+    function renderWorkflowPreview() {
+      workflowJsonPreviewEl.textContent = JSON.stringify(workflowPayload(), null, 2);
+    }
+
+    function renderWorkflowAgents() {
+      workflowAgentsEl.innerHTML = AGENTS.map(a => `<span class="agent-chip" draggable="true" data-wagent-id="${a.id}" title="${a.label}">${a.id}</span>`).join('');
+      workflowAgentsEl.querySelectorAll('.agent-chip').forEach(el => {
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/workflow-agent', el.dataset.wagentId);
+        });
+      });
+    }
+
+    function renderWorkflowStages() {
+      workflowStagesEl.innerHTML = workflowStages.map((s, i) => {
+        const chips = (s.agents || []).map(a => `<span class="agent-chip" style="cursor:default">${escapeHtml(a)} <button class="clear-btn" data-wremove-stage="${s.id}" data-wremove-agent="${escapeHtml(a)}" style="margin-left:6px;padding:1px 5px;">x</button></span>`).join('') || '<span style="opacity:.65">none</span>';
+        return `<div class="role-box" data-wstage-id="${s.id}" style="margin-bottom:8px;">
+          <div class="role-head"><span>${s.id} · ${s.type}</span><div>
+            <button class="clear-btn" data-wup="${s.id}">↑</button>
+            <button class="clear-btn" data-wdown="${s.id}">↓</button>
+            <button class="clear-btn" data-wclear="${s.id}">Clear Agents</button>
+            <button class="clear-btn" data-wremove="${s.id}">Remove</button>
+          </div></div>
+          <div style="font-size:.78rem;opacity:.8;margin-bottom:6px;">mergePolicy:
+            <select data-wmerge="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
+              ${['none','summary','judge','vote'].map(m=>`<option value="${m}" ${m===s.mergePolicy?'selected':''}>${m}</option>`).join('')}
+            </select>
+            type:
+            <select data-wtype="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
+              ${['research','synth','plan','execute','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="wstage-drop">${chips}</div>
+        </div>`;
+      }).join('');
+
+      workflowStagesEl.querySelectorAll('[data-wmerge]').forEach(el=>el.addEventListener('change',()=>{
+        const st=workflowStages.find(x=>x.id===el.dataset.wmerge); if(st) st.mergePolicy=el.value; renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wtype]').forEach(el=>el.addEventListener('change',()=>{
+        const st=workflowStages.find(x=>x.id===el.dataset.wtype); if(st) st.type=el.value; renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wclear]').forEach(btn=>btn.addEventListener('click',()=>{
+        const st=workflowStages.find(x=>x.id===btn.dataset.wclear); if(st) st.agents=[]; renderWorkflowStages(); renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wremove]').forEach(btn=>btn.addEventListener('click',()=>{
+        workflowStages=workflowStages.filter(x=>x.id!==btn.dataset.wremove); renderWorkflowStages(); renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wup]').forEach(btn=>btn.addEventListener('click',()=>{
+        const i=workflowStages.findIndex(x=>x.id===btn.dataset.wup); if(i>0){[workflowStages[i-1],workflowStages[i]]=[workflowStages[i],workflowStages[i-1]];} renderWorkflowStages(); renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wdown]').forEach(btn=>btn.addEventListener('click',()=>{
+        const i=workflowStages.findIndex(x=>x.id===btn.dataset.wdown); if(i>=0&&i<workflowStages.length-1){[workflowStages[i+1],workflowStages[i]]=[workflowStages[i],workflowStages[i+1]];} renderWorkflowStages(); renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wremove-stage]').forEach(btn=>btn.addEventListener('click',()=>{
+        const st=workflowStages.find(x=>x.id===btn.dataset.wremoveStage); if(st) st.agents=(st.agents||[]).filter(a=>a!==btn.dataset.wremoveAgent); renderWorkflowStages(); renderWorkflowPreview();
+      }));
+
+      workflowStagesEl.querySelectorAll('[data-wstage-id]').forEach(box=>{
+        box.addEventListener('dragover',(e)=>{e.preventDefault(); box.classList.add('dragover');});
+        box.addEventListener('dragleave',()=>box.classList.remove('dragover'));
+        box.addEventListener('drop',(e)=>{
+          e.preventDefault(); box.classList.remove('dragover');
+          const aid=e.dataTransfer.getData('text/workflow-agent') || e.dataTransfer.getData('text/plain');
+          const st=workflowStages.find(x=>x.id===box.dataset.wstageId);
+          if(st && aid && !(st.agents||[]).includes(aid)) st.agents.push(aid);
+          renderWorkflowStages(); renderWorkflowPreview();
+        });
+      });
+    }
+
+    function switchMode(next) {
+      mode = next;
+      roleBoardEl.style.display = mode === 'roles' ? 'grid' : 'none';
+      workflowBoardEl.style.display = mode === 'workflow' ? 'grid' : 'none';
+    }
+
     function renderRuns(runs) {
       if (!runs.length) {
         runsList.innerHTML = '<div class="empty">No runs yet. Enter a goal and click Run.</div>';
@@ -356,7 +474,7 @@
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
             <span class="run-status ${statusClass(r.status)}">${r.status}</span>
           </div>
-          <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))}</div>
+          <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -391,6 +509,10 @@
       let content = '';
       if (run.error) content += `<div class="error-msg">${escapeHtml(run.error)}</div>`;
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
+      if (Array.isArray(run.config?.workflowStages)) {
+        const list = run.config.workflowStages.map((s, i) => `${i+1}. ${s.id} (${s.type}) agents=${(s.agents||[]).join(',')} merge=${s.mergePolicy}`).join('\n');
+        content += `<p><strong>Workflow Stages:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(list || '(none)')}</pre>`;
+      }
       if (run.artifacts) content += `<p><strong>Artifacts:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.artifacts, null, 2))}</pre>`;
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
@@ -433,7 +555,11 @@
       }
       try {
         submitBtn.disabled = true;
-        const { runId } = await createRun(goal, assignmentPayload());
+        const payloadRoles = assignmentPayload();
+        const payload = mode === 'workflow'
+          ? { ...payloadRoles, workflowStages: workflowPayload() }
+          : payloadRoles;
+        const { runId } = await createRun(goal, payload);
         goalInput.value = '';
         selectedRunId = runId;
         startPolling();
@@ -453,6 +579,21 @@
     renderAvailableAgents();
     renderRoles();
     renderRoleJsonPreview();
+    renderWorkflowAgents();
+    renderWorkflowStages();
+    renderWorkflowPreview();
+    switchMode('roles');
+
+    document.querySelectorAll('input[name="mode"]').forEach(r => {
+      r.addEventListener('change', () => switchMode(r.value));
+    });
+
+    addStageBtn.addEventListener('click', () => {
+      const id = `s${Date.now().toString(36).slice(-4)}`;
+      workflowStages.push({ id, type: 'research', agents: [], mergePolicy: 'none', notes: '' });
+      renderWorkflowStages();
+      renderWorkflowPreview();
+    });
 
     fetchRuns().then(runs => {
       renderRuns(runs);
