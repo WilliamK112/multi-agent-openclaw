@@ -110,3 +110,10 @@ marker=CURSOR_UI_EDIT_run_1772040567645_ctgpkf
 - Edited inside Cursor UI (not shell).
 - Protected by Approval/Resume for openclaw_act.
 ---
+
+---
+## Test Run Evidence
+marker=TEST_RUN_run_1772041422341_0tjfnn
+- Ran npm test via shell_run
+- Output saved to docs/TEST_OUTPUT.txt
+---

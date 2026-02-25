@@ -92,6 +92,32 @@ export async function executor(step: PlanStep, projectRoot: string): Promise<Ste
         ];
       }
 
+      if (raw === "__VERIFY_TEST_MARKER__") {
+        const abs = "/Users/William/Projects/multi-agent-openclaw/README.md";
+        const marker = step.inputs?.marker ?? "TEST_RUN_";
+        commands = [
+          `grep -n \"marker=${marker}\" ${abs} || true`,
+          `tail -n 40 ${abs}`,
+        ];
+      }
+
+      if (raw === "__RUN_NPM_TEST_AND_WRITE__") {
+        const out = await shellRun("npm test", projectRoot);
+        logSkill("shell_run", { command: "npm test" }, out);
+
+        const content = [
+          `timestamp=${new Date().toISOString()}`,
+          `command=npm test`,
+          `exitCode=${out.ok ? 0 : Number(out.code ?? 1)}`,
+          `stdout=${(out.stdout ?? "").slice(0, 4000)}`,
+          `stderr=${(out.stderr ?? "").slice(0, 4000)}`,
+        ].join("\n") + "\n";
+
+        const writeOut = await fileWrite(projectRoot, "docs/TEST_OUTPUT.txt", content);
+        logSkill("file_write", { path: "docs/TEST_OUTPUT.txt", source: "npm test output" }, writeOut);
+        continue;
+      }
+
       for (const command of commands) {
         const out = await shellRun(command, projectRoot);
         logSkill("shell_run", { command }, out);

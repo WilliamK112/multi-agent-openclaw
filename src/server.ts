@@ -134,16 +134,19 @@ async function continueRun(runId: string) {
         }
       }
 
-      if (run.goal.toLowerCase().includes("cursor readme demo") && step.id === "step-3") {
-        const marker = run.cursorEdit?.marker ?? "";
-        const readmePath = `${process.cwd()}/README.md`;
+      const isCursorReadmeDemo = run.goal.toLowerCase().includes("cursor readme demo");
+      const isTestRunEvidence = run.goal.toLowerCase().includes("test run evidence");
+
+      if ((isCursorReadmeDemo && step.id === "step-3") || (isTestRunEvidence && step.id === "step-3")) {
+        const expectedMarker = isTestRunEvidence ? `TEST_RUN_${run.id}` : `CURSOR_UI_EDIT_${run.id}`;
+        const readmePath = "/Users/William/Projects/multi-agent-openclaw/README.md";
         const content = await import("node:fs/promises").then((m) => m.readFile(readmePath, "utf8")).catch(() => "");
-        const okMarker = marker ? content.includes(`marker=${marker}`) : false;
+        const okMarker = content.includes(`marker=${expectedMarker}`);
         const okLine = content.includes("Edited inside Cursor UI (not shell).");
 
         if (!okMarker || !okLine) {
           if ((run.cursorEdit?.retryCount ?? 0) < 1) {
-            run.cursorEdit = { marker: run.cursorEdit?.marker ?? marker, retryCount: 1 };
+            run.cursorEdit = { marker: expectedMarker, retryCount: 1 };
             run.approvedStepIds = [];
             run.nextStepIndex = 0;
             run.pendingStepId = null;
@@ -156,14 +159,14 @@ async function continueRun(runId: string) {
           }
 
           run.status = "error";
-          run.error = "cursor_ui_edit_failed: marker not found after retry";
-          pushLog(run, "cursor_ui_edit_failed: marker not found after retry");
+          run.error = "readme_ui_edit_failed: marker not found after retry";
+          pushLog(run, "readme_ui_edit_failed: marker not found after retry");
           pushLog(run, "run:error");
           run.isProcessing = false;
           return;
         }
 
-        pushLog(run, `cursor_ui_edit_verified: marker=${marker}`);
+        pushLog(run, `cursor_ui_edit_verified: marker=${expectedMarker}`);
       }
 
       const fileReadLog = result.logs.find((l) => l.skill === "file_read") as any;
@@ -225,7 +228,7 @@ app.post("/run", (req, res) => {
     approvedStepIds: [],
     isProcessing: false,
     selfCheck: null,
-    cursorEdit: { marker: `CURSOR_UI_EDIT_${runId}`, retryCount: 0 },
+    cursorEdit: { marker: goal.toLowerCase().includes("test run evidence") ? `TEST_RUN_${runId}` : `CURSOR_UI_EDIT_${runId}`, retryCount: 0 },
   };
 
   runs.set(runId, record);

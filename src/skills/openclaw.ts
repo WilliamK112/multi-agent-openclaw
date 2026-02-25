@@ -17,6 +17,7 @@ type Action =
   | { kind: "dashboard" }
   | { kind: "cursor_open_project" }
   | { kind: "cursor_append_readme_demo"; marker: string }
+  | { kind: "cursor_append_test_evidence"; marker: string }
   | { kind: "cursor_debug_write_marker"; marker: string }
   | { kind: "demo_create_file"; marker: string };
 
@@ -45,6 +46,10 @@ function parseInstruction(instruction: string): Action | null {
     const marker = body.slice("cursor_append_readme_demo".length).trim() || "CURSOR_UI_EDIT_UNKNOWN";
     return { kind: "cursor_append_readme_demo", marker };
   }
+  if (body.startsWith("cursor_append_test_evidence")) {
+    const marker = body.slice("cursor_append_test_evidence".length).trim() || "TEST_RUN_UNKNOWN";
+    return { kind: "cursor_append_test_evidence", marker };
+  }
   if (body.startsWith("cursor_debug_write_marker")) {
     const marker = body.slice("cursor_debug_write_marker".length).trim() || "CURSOR_UI_EDIT_UNKNOWN";
     return { kind: "cursor_debug_write_marker", marker };
@@ -60,6 +65,13 @@ function parseInstruction(instruction: string): Action | null {
 function summarize(text: string, max = 800): string {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length > max ? `${compact.slice(0, max)}...` : compact;
+}
+
+function validateSafeUiLine(line: string): string {
+  if (/[`"\\]/.test(line)) {
+    throw new Error(`Unsafe characters for UI typing line: ${line}`);
+  }
+  return line;
 }
 
 export async function openclawAct(instruction: string): Promise<OpenClawActResult> {
@@ -136,7 +148,7 @@ export async function openclawAct(instruction: string): Promise<OpenClawActResul
     };
   }
 
-  if (action.kind === "cursor_append_readme_demo" || action.kind === "cursor_debug_write_marker") {
+  if (action.kind === "cursor_append_readme_demo" || action.kind === "cursor_append_test_evidence" || action.kind === "cursor_debug_write_marker") {
     const readmePath = path.resolve(process.cwd(), "README.md");
     const openOut = await run(`open -a Cursor ${JSON.stringify(readmePath)}`);
     if (!openOut.ok) {
@@ -150,13 +162,22 @@ export async function openclawAct(instruction: string): Promise<OpenClawActResul
       };
     }
 
-    const lines = action.kind === "cursor_debug_write_marker"
+    const linesRaw = action.kind === "cursor_debug_write_marker"
       ? [
           "---",
           "## Cursor Automation Demo",
           `marker=${action.marker}`,
           "- Edited inside Cursor UI (not shell).",
           "- Protected by Approval/Resume for openclaw_act.",
+          "---",
+        ]
+      : action.kind === "cursor_append_test_evidence"
+      ? [
+          "---",
+          "## Test Run Evidence",
+          `marker=${action.marker}`,
+          "- Ran npm test via shell_run",
+          "- Output saved to docs/TEST_OUTPUT.txt",
           "---",
         ]
       : [
@@ -168,6 +189,8 @@ export async function openclawAct(instruction: string): Promise<OpenClawActResul
           "- Next: run real tests and save output to docs/TEST_OUTPUT.txt.",
           "---",
         ];
+
+    const lines = linesRaw.map(validateSafeUiLine);
 
     const script = [
       'tell application "Cursor" to activate',
@@ -194,8 +217,12 @@ export async function openclawAct(instruction: string): Promise<OpenClawActResul
 
     script.push('tell application "System Events"');
     script.push('  keystroke "s" using command down');
-    script.push('  delay 0.1');
+    script.push('  delay 0.3');
     script.push('  keystroke "s" using command down');
+    script.push('  delay 0.2');
+    script.push('  keystroke "f" using command down');
+    script.push(`  keystroke "${action.marker}"`);
+    script.push('  key code 36');
     script.push('end tell');
 
     const cmd = script.map((line) => `-e ${JSON.stringify(line)}`).join(" ");

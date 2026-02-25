@@ -59,9 +59,34 @@ export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QA
     checks["TEST_OUTPUT has exitCode=0"] = await containsText(testPath, "exitCode=0");
   }
 
-  const issues = Object.entries(checks)
-    .filter(([, ok]) => !ok)
-    .map(([name]) => `Missing/failed: ${name}`);
+  let testRunEvidenceExtraIssues: string[] = [];
+  if (goal.toLowerCase().includes("test run evidence")) {
+    const marker = `TEST_RUN_${runId}`;
+    const testPath = path.join(projectRoot, "docs/TEST_OUTPUT.txt");
+    checks[`README contains marker=${marker}`] = await containsText(readmePath, `marker=${marker}`);
+    checks["TEST_OUTPUT exists"] = await exists(testPath);
+    checks["TEST_OUTPUT contains command=npm test"] = await containsText(testPath, "command=npm test");
+    checks["TEST_OUTPUT contains exitCode"] = await containsText(testPath, "exitCode=");
+
+    try {
+      const txt = await fs.readFile(testPath, "utf8");
+      const m = txt.match(/exitCode=(\-?\d+)/);
+      const code = m ? Number(m[1]) : NaN;
+      if (!Number.isNaN(code) && code !== 0) {
+        const stderrLine = txt.split("\n").find((l) => l.startsWith("stderr=")) ?? "stderr=(missing)";
+        testRunEvidenceExtraIssues.push(`npm test failed (exitCode=${code}) ${stderrLine.slice(0, 220)}`);
+      }
+    } catch {
+      testRunEvidenceExtraIssues.push("Could not read TEST_OUTPUT for npm test result summary");
+    }
+  }
+
+  const issues = [
+    ...Object.entries(checks)
+      .filter(([, ok]) => !ok)
+      .map(([name]) => `Missing/failed: ${name}`),
+    ...testRunEvidenceExtraIssues,
+  ];
 
   return {
     pass: issues.length === 0,

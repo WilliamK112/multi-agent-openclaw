@@ -149,6 +149,53 @@ function fakeResponse(req: LLMRequest): LLMResponse {
     };
   }
 
+  if (cleanGoal.toLowerCase().includes("test run evidence")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Open README in Cursor and append Test Run Evidence via UI",
+            tools: ["openclaw_act"],
+            success_criteria: "README appended and saved in Cursor UI",
+            inputs: { instruction: "openclaw: cursor_append_test_evidence TEST_RUN___RUN_ID__" },
+          },
+          {
+            id: "step-2",
+            objective: "Read-only shell verify marker in README",
+            tools: ["shell_run"],
+            success_criteria: "grep and tail evidence emitted",
+            inputs: { command: "__VERIFY_TEST_MARKER__", marker: "TEST_RUN___RUN_ID__" },
+          },
+          {
+            id: "step-3",
+            objective: "Read README and verify exact test marker",
+            tools: ["file_read"],
+            success_criteria: "README contains marker=TEST_RUN_<RUN_ID>",
+            inputs: { path: "/Users/William/Projects/multi-agent-openclaw/README.md" },
+          },
+          {
+            id: "step-4",
+            objective: "Run npm test and write docs/TEST_OUTPUT.txt",
+            tools: ["shell_run"],
+            success_criteria: "npm test executed and output file written",
+            inputs: { command: "__RUN_NPM_TEST_AND_WRITE__" },
+          },
+          {
+            id: "step-5",
+            objective: "Read TEST_OUTPUT and verify fields",
+            tools: ["file_read"],
+            success_criteria: "timestamp/command/exitCode/stdout/stderr present",
+            inputs: { path: "docs/TEST_OUTPUT.txt" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   if (cleanGoal.toLowerCase().includes("test output demo")) {
     return {
       text: JSON.stringify({
