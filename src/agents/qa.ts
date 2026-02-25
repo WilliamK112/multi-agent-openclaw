@@ -25,7 +25,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
   }
 }
 
-export async function qa(projectRoot: string): Promise<QAResult> {
+export async function qa(projectRoot: string, goal = ""): Promise<QAResult> {
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -45,6 +45,14 @@ export async function qa(projectRoot: string): Promise<QAResult> {
     "README has approval line": await containsText(readmePath, "openclaw_act executes only after Approval/Resume"),
     "README has TEST_OUTPUT TODO line": await containsText(readmePath, "Next step: run npm test and save output to docs/TEST_OUTPUT.txt (TODO)"),
   };
+
+  if (goal.toLowerCase().includes("test output demo")) {
+    const testPath = path.join(projectRoot, "docs/TEST_OUTPUT.txt");
+    checks["TEST_OUTPUT file exists"] = await exists(testPath);
+    checks["TEST_OUTPUT has timestamp"] = await containsText(testPath, "timestamp=");
+    checks["TEST_OUTPUT has command"] = await containsText(testPath, "command=");
+    checks["TEST_OUTPUT has exitCode=0"] = await containsText(testPath, "exitCode=0");
+  }
 
   const issues = Object.entries(checks)
     .filter(([, ok]) => !ok)

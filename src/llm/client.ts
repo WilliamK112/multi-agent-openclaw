@@ -90,6 +90,32 @@ function fakeResponse(req: LLMRequest): LLMResponse {
     };
   }
 
+  if (cleanGoal.toLowerCase().includes("test output demo")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Select and run project self-check command",
+            tools: ["shell_run"],
+            success_criteria: "Self-check command exits successfully",
+            inputs: { command: "__AUTO_SELF_CHECK__" },
+          },
+          {
+            id: "step-2",
+            objective: "Write self-check result to docs/TEST_OUTPUT.txt",
+            tools: ["file_write"],
+            success_criteria: "docs/TEST_OUTPUT.txt exists with timestamp/command/exitCode/stdout/stderr",
+            inputs: { path: "docs/TEST_OUTPUT.txt" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   return {
     text: JSON.stringify({
       goal: cleanGoal,

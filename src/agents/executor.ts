@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { PlanStep } from "./planner";
 import { fileRead, fileWrite } from "../skills/files";
 import { shellRun } from "../skills/shell";
@@ -9,6 +11,24 @@ export type StepExecution = {
   logs: Array<{ skill: string; input: unknown; output: unknown }>;
   ok: boolean;
 };
+
+async function chooseSelfCheckCommand(projectRoot: string): Promise<string> {
+  try {
+    const pkgPath = path.join(projectRoot, "package.json");
+    const pkg = JSON.parse(await fs.readFile(pkgPath, "utf8"));
+    const scripts = pkg?.scripts ?? {};
+
+    const testScript = String(scripts.test ?? "");
+    const isPlaceholderTest = /no test specified/i.test(testScript) && /exit\s+1/.test(testScript);
+
+    if (scripts.test && !isPlaceholderTest) return "npm test";
+    if (scripts.lint) return "npm run lint";
+    if (scripts.build) return "npm run build";
+    return "npm -v";
+  } catch {
+    return "npm -v";
+  }
+}
 
 export async function executor(step: PlanStep, projectRoot: string): Promise<StepExecution> {
   const logs: StepExecution["logs"] = [];
@@ -23,25 +43,30 @@ export async function executor(step: PlanStep, projectRoot: string): Promise<Ste
 
   for (const tool of step.tools) {
     if (tool === "file_write") {
-      const path = step.inputs?.path ?? "README.md";
-      const content = path.endsWith("README.md")
-        ? `# multi-agent-openclaw\\n\\nGoal: ${step.objective}\\n\\nThis repo uses Planner / Executor / QA.\\n`
-        : `# Skills Interface\\n\\n- shell_run\\n- file_read\\n- file_write\\n- openclaw_act\\n`;
-      const out = await fileWrite(projectRoot, path, content);
-      logSkill("file_write", { path, contentPreview: content.slice(0, 60) }, out);
+      const filePath = step.inputs?.path ?? "README.md";
+      const forcedContent = step.inputs?.content;
+      const content =
+        forcedContent ??
+        (filePath.endsWith("README.md")
+          ? `# multi-agent-openclaw\\n\\nGoal: ${step.objective}\\n\\nThis repo uses Planner / Executor / QA.\\n`
+          : `# Skills Interface\\n\\n- shell_run\\n- file_read\\n- file_write\\n- openclaw_act\\n`);
+      const out = await fileWrite(projectRoot, filePath, content);
+      logSkill("file_write", { path: filePath, contentPreview: content.slice(0, 120) }, out);
       continue;
     }
 
     if (tool === "file_read") {
-      const path = step.inputs?.path ?? "README.md";
-      const out = await fileRead(projectRoot, path);
-      logSkill("file_read", { path }, out.ok ? { ...out, content: (out.content ?? "").slice(0, 120) } : out);
+      const filePath = step.inputs?.path ?? "README.md";
+      const out = await fileRead(projectRoot, filePath);
+      logSkill("file_read", { path: filePath }, out.ok ? { ...out, content: (out.content ?? "").slice(0, 200) } : out);
       continue;
     }
 
     if (tool === "shell_run") {
-      const cmds = [step.inputs?.command ?? "pwd", "ls src/skills"];
-      for (const command of cmds) {
+      const raw = step.inputs?.command ?? "pwd";
+      const commands = raw === "__AUTO_SELF_CHECK__" ? [await chooseSelfCheckCommand(projectRoot)] : [raw];
+
+      for (const command of commands) {
         const out = await shellRun(command, projectRoot);
         logSkill("shell_run", { command }, out);
       }

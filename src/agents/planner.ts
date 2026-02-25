@@ -62,6 +62,28 @@ function fallbackPlan(goal: string): Plan {
     };
   }
 
+  if (goal.toLowerCase().includes("test output demo")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Select and run project self-check command",
+          tools: ["shell_run"],
+          success_criteria: "Self-check command exits successfully",
+          inputs: { command: "__AUTO_SELF_CHECK__" },
+        },
+        {
+          id: "step-2",
+          objective: "Write self-check result to docs/TEST_OUTPUT.txt",
+          tools: ["file_write"],
+          success_criteria: "docs/TEST_OUTPUT.txt exists with timestamp/command/exitCode/stdout/stderr",
+          inputs: { path: "docs/TEST_OUTPUT.txt" },
+        },
+      ],
+    };
+  }
+
   return {
     goal,
     steps: [

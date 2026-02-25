@@ -23,6 +23,13 @@ type RunRecord = {
   nextStepIndex: number;
   approvedStepIds: string[];
   isProcessing: boolean;
+  selfCheck?: {
+    command: string;
+    exitCode: number;
+    stdout: string;
+    stderr: string;
+    timestamp: string;
+  } | null;
 };
 
 const app = express();
@@ -68,7 +75,48 @@ async function continueRun(runId: string) {
       }
 
       pushLog(run, `executor:step ${step.id} start`);
+      if (run.goal.toLowerCase().includes("test output demo") && step.tools.includes("file_write") && step.inputs?.path === "docs/TEST_OUTPUT.txt") {
+        const sc = run.selfCheck;
+        if (sc) {
+          step.inputs = {
+            ...(step.inputs ?? {}),
+            content: [
+              `timestamp=${sc.timestamp}`,
+              `command=${sc.command}`,
+              `exitCode=${sc.exitCode}`,
+              `stdout=${sc.stdout.slice(0, 2000)}`,
+              `stderr=${sc.stderr.slice(0, 2000)}`,
+            ].join("\n") + "\n",
+          };
+        }
+      }
+
       const result = await executor(step, process.cwd());
+
+      const shellLog = result.logs.find((l) => l.skill === "shell_run") as any;
+      if (shellLog?.output) {
+        const out = shellLog.output;
+        const cmd = shellLog.input?.command ?? "unknown";
+        const code = out.ok ? 0 : Number(out.code ?? 1);
+        if (run.goal.toLowerCase().includes("test output demo")) {
+          run.selfCheck = {
+            command: String(cmd),
+            exitCode: code,
+            stdout: String(out.stdout ?? ""),
+            stderr: String(out.stderr ?? ""),
+            timestamp: new Date().toISOString(),
+          };
+          pushLog(run, `self_check: command=${run.selfCheck.command} exitCode=${run.selfCheck.exitCode}`);
+          if (!out.ok) {
+            run.status = "error";
+            run.error = `Self-check command failed: ${run.selfCheck.command} (exitCode=${run.selfCheck.exitCode})\nstdout:\n${run.selfCheck.stdout}\nstderr:\n${run.selfCheck.stderr}`;
+            pushLog(run, "run:error");
+            run.isProcessing = false;
+            return;
+          }
+        }
+      }
+
       const openclawLog = result.logs.find((l) => l.skill === "openclaw_act") as any;
       if (openclawLog?.output?.output) {
         const summary = String(openclawLog.output.output).slice(0, 220);
@@ -79,7 +127,7 @@ async function continueRun(runId: string) {
       run.nextStepIndex = i + 1;
     }
 
-    run.qa = await qa(process.cwd());
+    run.qa = await qa(process.cwd(), run.goal);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
     run.status = "done";
@@ -115,6 +163,7 @@ app.post("/run", (req, res) => {
     nextStepIndex: 0,
     approvedStepIds: [],
     isProcessing: false,
+    selfCheck: null,
   };
 
   runs.set(runId, record);
