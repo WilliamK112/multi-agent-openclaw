@@ -53,3 +53,27 @@ Expected output includes:
 - Planner JSON plan
 - Executor step-by-step skill logs
 - QA pass/fail summary
+
+## Local API
+
+Start server:
+
+```bash
+npm run dev:server
+```
+
+Default port: `8787` (override with `PORT`).
+
+Create run:
+
+```bash
+curl -s -X POST http://127.0.0.1:8787/run \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Build a multi-agent skeleton and write README"}'
+```
+
+Check run:
+
+```bash
+curl -s http://127.0.0.1:8787/runs/RUN_ID_HERE
+```

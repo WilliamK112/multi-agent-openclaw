@@ -1,29 +1,16 @@
 import "dotenv/config";
-import readline from "node:readline";
 import { run } from "./orchestrator";
 
-function ask(question: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
 async function main() {
-  let goal = process.argv.slice(2).join(" ").trim();
+  const goal = process.argv.slice(2).join(" ").trim();
 
   if (!goal) {
-    goal = (await ask("Enter goal: ")).trim();
-    if (!goal) {
-      console.log('Usage: npm run dev -- "your goal"');
-      process.exit(1);
-    }
+    console.log('No goal provided. Use: npm run dev -- "your goal"');
+    console.log("Or start API server: npm run dev:server");
+    process.exit(1);
   }
 
-  const result = await run(goal, process.cwd());
+  const result = await run(goal);
 
   console.log("\n[Final] QA pass:", result.qa.pass);
   if (!result.qa.pass) {
