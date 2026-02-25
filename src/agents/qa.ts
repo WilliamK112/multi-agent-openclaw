@@ -66,6 +66,12 @@ export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QA
     checks["smoke test file exists"] = await exists(path.join(projectRoot, "test/smoke.test.js"));
   }
 
+  if (goal.toLowerCase().includes("stage 3c")) {
+    const demoPath = path.join(projectRoot, "docs/CURSOR_API_DEMO.md");
+    checks["CURSOR_API_DEMO exists"] = await exists(demoPath);
+    checks[`CURSOR_API_DEMO contains marker=CURSOR_API_${runId}`] = await containsText(demoPath, `marker=CURSOR_API_${runId}`);
+  }
+
   let testRunEvidenceExtraIssues: string[] = [];
   if (goal.toLowerCase().includes("test run evidence")) {
     const marker = `TEST_RUN_${runId}`;

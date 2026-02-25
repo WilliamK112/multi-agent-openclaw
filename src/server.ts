@@ -102,7 +102,7 @@ async function continueRun(runId: string) {
         };
       }
 
-      const result = await executor(step, process.cwd());
+      const result = await executor(step, process.cwd(), run.id);
 
       const shellLogs = result.logs.filter((l) => l.skill === "shell_run") as any[];
       for (const shellLog of shellLogs) {
@@ -179,6 +179,27 @@ async function continueRun(runId: string) {
         const markerFound = full.includes(markerNeedle);
         pushLog(run, `file_read_tail:\n${tailLines}`);
         pushLog(run, `markerFound=${markerFound} needle=${markerNeedle}`);
+      }
+
+      if (run.goal.toLowerCase().includes("stage 3c") && step.id === "step-2") {
+        const full = String(fileReadLog?.output?.content ?? "");
+        const needle = `marker=CURSOR_API_${run.id}`;
+        const markerFound = full.includes(needle);
+        pushLog(run, `cursor_api_markerFound=${markerFound} needle=${needle}`);
+        if (!markerFound) {
+          run.status = "error";
+          run.error = `cursor_api_write_failed: marker not found (${needle})`;
+          pushLog(run, "run:error");
+          run.isProcessing = false;
+          return;
+        }
+      }
+
+      const cursorActLog = result.logs.find((l) => l.skill === "cursor_act") as any;
+      if (cursorActLog?.output) {
+        const s = String(cursorActLog.output.summary ?? "cursor_act executed").slice(0, 240);
+        const err = cursorActLog.output.error ? ` error=${String(cursorActLog.output.error).slice(0,180)}` : "";
+        pushLog(run, `cursor_act: ${s}${err}`);
       }
 
       const openclawLog = result.logs.find((l) => l.skill === "openclaw_act") as any;

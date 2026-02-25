@@ -222,6 +222,42 @@ function fakeResponse(req: LLMRequest): LLMResponse {
     };
   }
 
+  if (cleanGoal.toLowerCase().includes("stage 3c")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Use cursor_act to write CURSOR_API_DEMO marker file",
+            tools: ["cursor_act"],
+            success_criteria: "docs/CURSOR_API_DEMO.md created/updated with marker",
+            inputs: {
+              repoPath: "/Users/William/Projects/multi-agent-openclaw",
+              instruction: "Create or update docs/CURSOR_API_DEMO.md with marker CURSOR_API___RUN_ID__ and include runId/timestamp lines",
+            },
+          },
+          {
+            id: "step-2",
+            objective: "Read CURSOR_API_DEMO file and verify marker",
+            tools: ["file_read"],
+            success_criteria: "marker CURSOR_API_<RUN_ID> present",
+            inputs: { path: "docs/CURSOR_API_DEMO.md" },
+          },
+          {
+            id: "step-3",
+            objective: "Optional shell self-check for marker visibility",
+            tools: ["shell_run"],
+            success_criteria: "grep marker returns at least one line",
+            inputs: { command: "__VERIFY_CURSOR_API_MARKER__", marker: "CURSOR_API___RUN_ID__" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   if (cleanGoal.toLowerCase().includes("test output demo")) {
     return {
       text: JSON.stringify({

@@ -4,6 +4,7 @@ import { PlanStep } from "./planner";
 import { fileRead, fileWrite } from "../skills/files";
 import { shellRun } from "../skills/shell";
 import { openclawAct } from "../skills/openclaw";
+import { cursorAct } from "../skills/cursor";
 
 export type StepExecution = {
   stepId: string;
@@ -30,7 +31,7 @@ async function chooseSelfCheckCommand(projectRoot: string): Promise<string> {
   }
 }
 
-export async function executor(step: PlanStep, projectRoot: string): Promise<StepExecution> {
+export async function executor(step: PlanStep, projectRoot: string, runId = ""): Promise<StepExecution> {
   const logs: StepExecution["logs"] = [];
 
   function logSkill(skill: string, input: unknown, output: unknown) {
@@ -101,6 +102,15 @@ export async function executor(step: PlanStep, projectRoot: string): Promise<Ste
         ];
       }
 
+      if (raw === "__VERIFY_CURSOR_API_MARKER__") {
+        const marker = step.inputs?.marker ?? "CURSOR_API_";
+        const abs = "/Users/William/Projects/multi-agent-openclaw/docs/CURSOR_API_DEMO.md";
+        commands = [
+          `grep -n \"marker=${marker}\" ${abs} || true`,
+          `tail -n 40 ${abs}`,
+        ];
+      }
+
       if (raw === "__RUN_NPM_TEST_AND_WRITE__") {
         const out = await shellRun("npm test", projectRoot);
         logSkill("shell_run", { command: "npm test" }, out);
@@ -129,6 +139,14 @@ export async function executor(step: PlanStep, projectRoot: string): Promise<Ste
       const instruction = step.inputs?.instruction ?? "No instruction";
       const out = await openclawAct(instruction);
       logSkill("openclaw_act", { instruction }, out);
+      continue;
+    }
+
+    if (tool === "cursor_act") {
+      const instruction = step.inputs?.instruction ?? "No instruction";
+      const repoPath = step.inputs?.repoPath ?? projectRoot;
+      const out = await cursorAct(repoPath, instruction, runId);
+      logSkill("cursor_act", { instruction, repoPath, runId }, out);
       continue;
     }
 

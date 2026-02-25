@@ -178,6 +178,38 @@ function fallbackPlan(goal: string): Plan {
     };
   }
 
+  if (goal.toLowerCase().includes("stage 3c")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Use cursor_act to write CURSOR_API_DEMO marker file",
+          tools: ["cursor_act"],
+          success_criteria: "docs/CURSOR_API_DEMO.md created/updated with marker",
+          inputs: {
+            repoPath: "/Users/William/Projects/multi-agent-openclaw",
+            instruction: "Create or update docs/CURSOR_API_DEMO.md with marker CURSOR_API___RUN_ID__ and include runId/timestamp lines",
+          },
+        },
+        {
+          id: "step-2",
+          objective: "Read CURSOR_API_DEMO file and verify marker",
+          tools: ["file_read"],
+          success_criteria: "marker CURSOR_API_<RUN_ID> present",
+          inputs: { path: "docs/CURSOR_API_DEMO.md" },
+        },
+        {
+          id: "step-3",
+          objective: "Optional shell self-check for marker visibility",
+          tools: ["shell_run"],
+          success_criteria: "grep marker returns at least one line",
+          inputs: { command: "__VERIFY_CURSOR_API_MARKER__", marker: "CURSOR_API___RUN_ID__" },
+        },
+      ],
+    };
+  }
+
   if (goal.toLowerCase().includes("test output demo")) {
     return {
       goal,
@@ -242,7 +274,7 @@ export async function planner(goal: string, provider: LLMProvider, model: string
   const userPrompt = [
     `Goal: ${goal}`,
     `Return strict JSON only with shape: { goal, steps:[{id, objective, tools, success_criteria, inputs?}] }`,
-    `Allowed tools: shell_run, file_read, file_write, openclaw_act`,
+    `Allowed tools: shell_run, file_read, file_write, openclaw_act, cursor_act`,
     `Need 3-5 steps.`,
     `Avoid writing over README.md; write generated output to README.generated.md if needed.`,
   ].join("\n");
