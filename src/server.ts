@@ -69,6 +69,11 @@ async function continueRun(runId: string) {
 
       pushLog(run, `executor:step ${step.id} start`);
       const result = await executor(step, process.cwd());
+      const openclawLog = result.logs.find((l) => l.skill === "openclaw_act") as any;
+      if (openclawLog?.output?.output) {
+        const summary = String(openclawLog.output.output).slice(0, 220);
+        pushLog(run, `openclaw_act: ${summary}`);
+      }
       pushLog(run, `executor:step ${step.id} ${result.ok ? "ok" : "fail"}`);
       pushLog(run, `executor:step ${step.id} done`);
       run.nextStepIndex = i + 1;

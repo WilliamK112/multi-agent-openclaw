@@ -59,10 +59,10 @@ function fallbackPlan(goal: string): Plan {
       },
       {
         id: "step-4",
-        objective: "Demonstrate OpenClaw action interface",
-        tools: ["openclaw_act"],
-        success_criteria: "openclaw_act runs allowlisted OpenClaw command",
-        inputs: { instruction: "openclaw: status" },
+        objective: "Create OpenClaw demo proof file",
+        tools: ["openclaw_act", "file_read"],
+        success_criteria: "docs/OPENCLAW_DEMO.txt exists with OPENCLAW_DEMO marker",
+        inputs: { instruction: "openclaw: demo_create_file OPENCLAW_DEMO", path: "docs/OPENCLAW_DEMO.txt" },
       },
     ],
   };
