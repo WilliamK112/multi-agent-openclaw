@@ -149,6 +149,15 @@
 <body>
   <div class="container">
     <h1>multi-agent-openclaw</h1>
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Recent Changes (for visibility)</h3>
+      <div style="font-size:0.85rem;line-height:1.45;opacity:.95;">
+        <div>• Added Workflow Builder mode (stages + agents + mergePolicy + JSON preview).</div>
+        <div>• Added multi-agent Research/Synth/QA stage assignment support.</div>
+        <div>• New English article: <code>docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md</code></div>
+        <div>• Exported Word file: <code>/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx</code></div>
+      </div>
+    </div>
     <div class="form-row">
       <input type="text" id="goal" placeholder="Enter your goal (e.g. Build a multi-agent system skeleton)" />
       <button class="btn-primary" id="submit">Run</button>
@@ -158,6 +167,19 @@
       <h3>Mode</h3>
       <label style="margin-right:12px;"><input type="radio" name="mode" value="roles" checked /> Role Assignment</label>
       <label><input type="radio" name="mode" value="workflow" /> Workflow Builder</label>
+      <button class="clear-btn" id="recommend-btn" style="margin-left:12px;">Recommend Workflow</button>
+      <span id="recommend-status" style="font-size:0.78rem;opacity:.8;margin-left:8px;"></span>
+    </div>
+
+    <div class="panel" id="recommend-panel" style="margin-bottom:12px;display:none;">
+      <h3>Recommendation / Auto Plan</h3>
+      <div id="recommend-explain" style="font-size:0.85rem;white-space:pre-wrap;margin-bottom:8px;"></div>
+      <div id="recommend-cost" style="font-size:0.82rem;opacity:.9;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <button class="clear-btn" id="apply-recommend-btn">Apply Recommended Workflow</button>
+        <button class="clear-btn" id="reset-default-workflow-btn">Reset to Default Workflow</button>
+      </div>
+      <div class="json-preview" id="recommend-json-preview"></div>
     </div>
 
     <div class="role-board" id="role-board">
@@ -179,8 +201,20 @@
       </div>
       <div class="panel">
         <h3>Workflow Builder</h3>
-        <button class="clear-btn" id="add-stage-btn" style="margin-bottom:8px;">Add Stage</button>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <label style="font-size:0.8rem;opacity:.9;">New stage from role:</label>
+          <select id="add-stage-template" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:6px;padding:4px 8px;">
+            <option value="research">Research</option>
+            <option value="main">Main</option>
+            <option value="executor">Executor</option>
+            <option value="qa">QA</option>
+            <option value="reviewer">Reviewer</option>
+          </select>
+          <button class="clear-btn" id="add-stage-btn">Add Stage</button>
+        </div>
         <div id="workflow-stages"></div>
+        <h3 style="margin-top:10px;">Roles (editable)</h3>
+        <div id="workflow-roles"></div>
         <div class="json-preview" id="workflow-json-preview"></div>
       </div>
     </div>
@@ -204,6 +238,7 @@
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
       { id: 'deepseek:local', label: 'deepseek:local（本地）' },
       { id: 'tavily-search:tool', label: 'tavily-search:tool（web search）' },
+      { id: 'chatgpt-api:gpt-4o-mini', label: 'chatgpt-api:gpt-4o-mini（OpenAI API）' },
       { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini' },
       { id: 'anthropic:sonnet', label: 'anthropic:sonnet' },
       { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）' },
@@ -219,10 +254,18 @@
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
     let mode = 'roles';
     let workflowStages = [
-      { id: 's1', type: 'research', agents: [], mergePolicy: 'none', notes: '' },
-      { id: 's2', type: 'synth', agents: [], mergePolicy: 'summary', notes: '' },
-      { id: 's3', type: 'qa', agents: [], mergePolicy: 'judge', notes: '' },
+      { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini', 'tavily-search:tool', 'deepseek:local'], mergePolicy: 'none', notes: '', roleId: 'researcher_1' },
+      { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: '', roleId: 'synthesizer' },
+      { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: '', roleId: 'qa_judge' },
     ];
+    let workflowRoles = [
+      { id: 'researcher_1', name: 'Researcher 1', prompt: 'Role: Researcher\nGoal: collect evidence\nInput: user goal\nOutput: bullets + citations\nConstraints: no secrets\nSelf-check: source diversity\nCost: medium\nStop if data missing' },
+      { id: 'synthesizer', name: 'Synthesizer', prompt: 'Role: Synthesizer\nGoal: merge outputs\nInput: research outputs\nOutput: concise summary\nConstraints: preserve uncertainty\nSelf-check: no contradictions\nCost: low\nFormat: structured sections' },
+      { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nGoal: validate deliverable\nInput: draft output\nOutput: pass/fail + checks\nConstraints: explicit criteria\nSelf-check: mention gaps\nCost: low\nFormat: checklist json' },
+      { id: 'executor', name: 'Executor', prompt: 'Role: Executor\nGoal: run tools exactly\nInput: plan steps\nOutput: logs + artifacts\nConstraints: no secret exposure\nSelf-check: verify outputs exist\nCost: low\nFormat: step records' },
+    ];
+    let roleAssignmentsByRole = Object.fromEntries(workflowRoles.map(r => [r.id, 'none']));
+    let recommendedBundle = null;
 
     const goalInput = document.getElementById('goal');
     const submitBtn = document.getElementById('submit');
@@ -239,6 +282,16 @@
     const workflowStagesEl = document.getElementById('workflow-stages');
     const workflowJsonPreviewEl = document.getElementById('workflow-json-preview');
     const addStageBtn = document.getElementById('add-stage-btn');
+    const addStageTemplateEl = document.getElementById('add-stage-template');
+    const workflowRolesEl = document.getElementById('workflow-roles');
+    const recommendBtn = document.getElementById('recommend-btn');
+    const recommendPanelEl = document.getElementById('recommend-panel');
+    const recommendExplainEl = document.getElementById('recommend-explain');
+    const recommendCostEl = document.getElementById('recommend-cost');
+    const recommendJsonPreviewEl = document.getElementById('recommend-json-preview');
+    const applyRecommendBtn = document.getElementById('apply-recommend-btn');
+    const resetDefaultWorkflowBtn = document.getElementById('reset-default-workflow-btn');
+    const recommendStatusEl = document.getElementById('recommend-status');
 
     async function fetchRuns() {
       const res = await fetch(`${API}/runs?limit=50`);
@@ -252,9 +305,12 @@
       return res.json();
     }
 
-    async function createRun(goal, roleAssignmentsPayload) {
+    async function createRun(goal, runConfigPayload) {
       const payload = { goal };
-      if (roleAssignmentsPayload) payload.roleAssignments = roleAssignmentsPayload;
+      if (runConfigPayload?.roleAssignments) payload.roleAssignments = runConfigPayload.roleAssignments;
+      if (runConfigPayload?.workflowStages) payload.workflowStages = runConfigPayload.workflowStages;
+      if (runConfigPayload?.roles) payload.roles = runConfigPayload.roles;
+      if (runConfigPayload?.roleAssignmentsByRole) payload.roleAssignmentsByRole = runConfigPayload.roleAssignmentsByRole;
       const res = await fetch(`${API}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -387,7 +443,11 @@
     }
 
     function renderWorkflowPreview() {
-      workflowJsonPreviewEl.textContent = JSON.stringify(workflowPayload(), null, 2);
+      workflowJsonPreviewEl.textContent = JSON.stringify({
+        workflowStages: workflowPayload(),
+        roles: workflowRoles,
+        roleAssignmentsByRole,
+      }, null, 2);
     }
 
     function renderWorkflowAgents() {
@@ -417,6 +477,10 @@
             <select data-wtype="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
               ${['research','synth','plan','execute','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
             </select>
+            role:
+            <select data-wrole="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
+              ${workflowRoles.map(r=>`<option value="${r.id}" ${r.id===s.roleId?'selected':''}>${r.id}</option>`).join('')}
+            </select>
           </div>
           <div class="wstage-drop">${chips}</div>
         </div>`;
@@ -427,6 +491,9 @@
       }));
       workflowStagesEl.querySelectorAll('[data-wtype]').forEach(el=>el.addEventListener('change',()=>{
         const st=workflowStages.find(x=>x.id===el.dataset.wtype); if(st) st.type=el.value; renderWorkflowPreview();
+      }));
+      workflowStagesEl.querySelectorAll('[data-wrole]').forEach(el=>el.addEventListener('change',()=>{
+        const st=workflowStages.find(x=>x.id===el.dataset.wrole); if(st) st.roleId=el.value; renderWorkflowPreview();
       }));
       workflowStagesEl.querySelectorAll('[data-wclear]').forEach(btn=>btn.addEventListener('click',()=>{
         const st=workflowStages.find(x=>x.id===btn.dataset.wclear); if(st) st.agents=[]; renderWorkflowStages(); renderWorkflowPreview();
@@ -457,10 +524,171 @@
       });
     }
 
+    function stageTemplate(roleKey) {
+      const map = {
+        main: { type: 'plan', mergePolicy: 'summary', title: 'Main', roleId: 'planner' },
+        research: { type: 'research', mergePolicy: 'none', title: 'Research', roleId: 'researcher_1' },
+        executor: { type: 'execute', mergePolicy: 'none', title: 'Executor', roleId: 'executor' },
+        qa: { type: 'qa', mergePolicy: 'judge', title: 'QA', roleId: 'qa_judge' },
+        reviewer: { type: 'review', mergePolicy: 'judge', title: 'Reviewer', roleId: 'qa_judge' },
+      };
+      const t = map[roleKey] || map.research;
+      const current = roleAssignments[roleKey];
+      const agents = Array.isArray(current) ? current.slice() : (current ? [current] : []);
+      return {
+        id: `${roleKey}_${Date.now().toString(36).slice(-4)}`,
+        type: t.type,
+        agents,
+        mergePolicy: t.mergePolicy,
+        notes: `from role ${t.title}`,
+        roleId: t.roleId,
+      };
+    }
+
     function switchMode(next) {
       mode = next;
       roleBoardEl.style.display = mode === 'roles' ? 'grid' : 'none';
       workflowBoardEl.style.display = mode === 'workflow' ? 'grid' : 'none';
+    }
+
+    function defaultWorkflowBundle() {
+      const roles = [
+        { id: 'researcher_1', name: 'Researcher 1', prompt: 'Role: Researcher\nBoundary: gather evidence only\nInput: user goal\nOutput: bullets with sources\nFormat: concise\nRisk check: highlight uncertainty\nCost cap: medium\nNo secrets in output' },
+        { id: 'synthesizer', name: 'Synthesizer', prompt: 'Role: Synthesizer\nBoundary: merge inputs only\nInput: research outputs\nOutput: structured summary\nFormat: sections + bullets\nRisk check: list assumptions\nCost cap: low\nNo new claims without source' },
+        { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: evaluate quality\nInput: final draft\nOutput: pass/fail + checks\nFormat: checklist\nRisk check: cite missing evidence\nCost cap: low\nNo secrets in report' },
+        { id: 'executor', name: 'Executor', prompt: 'Role: Executor\nBoundary: execute approved steps\nInput: plan json\nOutput: logs + artifacts\nFormat: step records\nRisk check: verify file outputs\nCost cap: low\nStop on policy conflict' },
+      ];
+      const roleMap = { researcher_1: 'chatgpt-api:gpt-4o-mini', synthesizer: 'chatgpt-api:gpt-4o-mini', qa_judge: 'anthropic:sonnet', executor: 'none' };
+      const stages = [
+        { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini','tavily-search:tool','deepseek:local'], mergePolicy: 'none', notes: 'collect evidence', roleId: 'researcher_1' },
+        { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'merge and write', roleId: 'synthesizer' },
+        { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'quality gate', roleId: 'qa_judge' },
+      ];
+      return { stages, roles, roleAssignmentsByRole: roleMap, explainWhy: 'Default research->synth->qa pipeline balances evidence gathering, summary quality, and validation.', costHint: 'medium' };
+    }
+
+    function classifyGoal(goal) {
+      const g = (goal || '').toLowerCase();
+      if (/research|report|article|essay|policy|analysis|topic/.test(g)) return 'research_writing';
+      if (/bug|fix|feature|refactor|code|implement|add\s+filter/.test(g)) return 'code_change';
+      if (/cursor|ui|click|browser|openclaw_act|automation/.test(g)) return 'ui_automation';
+      if (/data|csv|table|batch|analy|script|etl/.test(g)) return 'data_task';
+      return 'misc';
+    }
+
+    function recommendBundle(goal) {
+      const type = classifyGoal(goal);
+      const mkRole = (id, name, lines) => ({ id, name, prompt: lines.join('\n') });
+      if (type === 'research_writing') {
+        const roles = [
+          mkRole('researcher_a','Researcher A',['Role: Researcher A','Boundary: collect factual sources','Input: goal text','Output: evidence bullets + links','Format: concise list','Risk check: uncertainty flag','Cost cap: medium','No secrets/log leaks']),
+          mkRole('researcher_b','Researcher B',['Role: Researcher B','Boundary: gather counterpoints','Input: goal text','Output: opposing evidence','Format: bullets + caveats','Risk check: bias check','Cost cap: medium','No secrets/log leaks']),
+          mkRole('synthesizer','Synthesizer',['Role: Synthesizer','Boundary: merge outputs','Input: research outputs','Output: coherent draft','Format: sections + table','Risk check: cite uncertainty','Cost cap: low','No unsupported claims']),
+          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: evaluate quality','Input: final draft','Output: pass/fail + checks','Format: checklist','Risk check: missing refs','Cost cap: low','Stop on weak evidence']),
+        ];
+        return {
+          stages: [
+            { id:'s1', type:'research', agents:['tavily-search:tool','deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'parallel evidence collection', roleId:'researcher_a' },
+            { id:'s2', type:'research', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'counterarguments', roleId:'researcher_b' },
+            { id:'s3', type:'synth', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'merge findings', roleId:'synthesizer' },
+            { id:'s4', type:'qa', agents:['anthropic:sonnet'], mergePolicy:'judge', notes:'quality gate', roleId:'qa_judge' },
+          ],
+          roles,
+          roleAssignmentsByRole: { researcher_a:'chatgpt-api:gpt-4o-mini', researcher_b:'deepseek:local', synthesizer:'chatgpt-api:gpt-4o-mini', qa_judge:'anthropic:sonnet' },
+          explainWhy: 'Detected research-writing intent. Added dual research roles for breadth, then synthesizer and QA judge for consistency and citation quality.',
+          costHint: 'high'
+        };
+      }
+      if (type === 'code_change') {
+        const roles = [
+          mkRole('code_research','Code Researcher',['Role: Code Researcher','Boundary: locate files','Input: goal + repo tree','Output: target file list','Format: bullets','Risk check: side effects','Cost cap: low','No code edits','Evidence required']),
+          mkRole('planner','Planner',['Role: Planner','Boundary: make step plan','Input: findings','Output: plan json','Format: objective/tools/criteria','Risk check: rollback path','Cost cap: low','No secret exposure','Deterministic output']),
+          mkRole('executor','Executor',['Role: Executor','Boundary: execute tools','Input: approved plan','Output: diffs/logs','Format: step logs','Risk check: test pass','Cost cap: low','No out-of-scope actions','Stop on error']),
+          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: verify acceptance','Input: outputs/tests','Output: pass/fail','Format: checks','Risk check: regression','Cost cap: low','Evidence required','No assumptions']),
+        ];
+        return {
+          stages: [
+            { id:'s1', type:'research', agents:['deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'understand codebase', roleId:'code_research' },
+            { id:'s2', type:'plan', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'produce plan', roleId:'planner' },
+            { id:'s3', type:'execute', agents:['none'], mergePolicy:'none', notes:'tool execution', roleId:'executor' },
+            { id:'s4', type:'qa', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'judge', notes:'verify', roleId:'qa_judge' },
+          ],
+          roles,
+          roleAssignmentsByRole: { code_research:'deepseek:local', planner:'chatgpt-api:gpt-4o-mini', executor:'none', qa_judge:'chatgpt-api:gpt-4o-mini' },
+          explainWhy: 'Detected code-change intent. Separate code understanding, planning, execution, and QA to reduce regressions.',
+          costHint: 'medium'
+        };
+      }
+      if (type === 'ui_automation') {
+        const roles = [
+          mkRole('ui_planner','UI Planner',['Role: UI Planner','Boundary: script UI steps','Input: UI goal','Output: ordered UI actions','Format: numbered steps','Risk check: approval points','Cost cap: low','No secret fields','Add fallback']),
+          mkRole('ui_operator','UI Operator',['Role: UI Operator','Boundary: perform approved UI actions','Input: approved steps','Output: action log','Format: concise','Risk check: stop on popup','Cost cap: low','Needs approval','No hidden actions']),
+          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: verify markers/results','Input: artifacts','Output: pass/fail checks','Format: checklist','Risk check: false positives','Cost cap: low','Evidence required','No assumptions']),
+          mkRole('reviewer','Reviewer',['Role: Reviewer','Boundary: sanity review','Input: logs + result','Output: issues list','Format: bullets','Risk check: missing steps','Cost cap: low','No secret exposure','Actionable advice']),
+        ];
+        return {
+          stages: [
+            { id:'s1', type:'plan', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'plan UI actions', roleId:'ui_planner' },
+            { id:'s2', type:'execute', agents:['cursor_ui:tool'], mergePolicy:'none', notes:'execute with approval', roleId:'ui_operator' },
+            { id:'s3', type:'qa', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'judge', notes:'verify outputs', roleId:'qa_judge' },
+          ],
+          roles,
+          roleAssignmentsByRole: { ui_planner:'chatgpt-api:gpt-4o-mini', ui_operator:'cursor_ui:tool', qa_judge:'chatgpt-api:gpt-4o-mini', reviewer:'anthropic:sonnet' },
+          explainWhy: 'Detected UI automation intent. Added explicit planning and approval-aware execution role before QA verification.',
+          costHint: 'medium'
+        };
+      }
+      if (type === 'data_task') {
+        const roles = [
+          mkRole('data_planner','Data Planner',['Role: Data Planner','Boundary: define transform steps','Input: task goal','Output: execution recipe','Format: numbered','Risk check: schema assumptions','Cost cap: low','No secrets','Validation required']),
+          mkRole('data_executor','Data Executor',['Role: Data Executor','Boundary: run scripts/tools','Input: recipe','Output: result files','Format: logs','Risk check: row counts','Cost cap: low','No out-of-scope actions','Stop on errors']),
+          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: validate outputs','Input: result artifacts','Output: checks','Format: checklist','Risk check: nulls/outliers','Cost cap: low','Evidence required','Clear verdict']),
+          mkRole('summarizer','Summarizer',['Role: Summarizer','Boundary: concise wrap-up','Input: execution + QA','Output: summary','Format: bullets','Risk check: caveats','Cost cap: low','No fabrication','Include next steps']),
+        ];
+        return {
+          stages: [
+            { id:'s1', type:'plan', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'plan data task', roleId:'data_planner' },
+            { id:'s2', type:'execute', agents:['none'], mergePolicy:'none', notes:'run scripts', roleId:'data_executor' },
+            { id:'s3', type:'qa', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'judge', notes:'validate outputs', roleId:'qa_judge' },
+          ],
+          roles,
+          roleAssignmentsByRole: { data_planner:'chatgpt-api:gpt-4o-mini', data_executor:'none', qa_judge:'chatgpt-api:gpt-4o-mini', summarizer:'chatgpt-api:gpt-4o-mini' },
+          explainWhy: 'Detected data-task intent. Added plan->execute->qa pipeline with deterministic execution stage.',
+          costHint: 'low'
+        };
+      }
+      const d = defaultWorkflowBundle();
+      return { ...d, explainWhy: 'Goal type is mixed/unclear. Using default research->synth->qa template as safe baseline.', costHint: 'medium' };
+    }
+
+    function renderWorkflowRoles() {
+      workflowRolesEl.innerHTML = workflowRoles.map(r => {
+        const assigned = roleAssignmentsByRole[r.id] || 'none';
+        return `<div class="role-box" style="margin-bottom:8px;">
+          <div class="role-head"><span>${escapeHtml(r.name)} (${escapeHtml(r.id)})</span></div>
+          <div style="margin-bottom:6px;font-size:.8rem;">Agent:
+            <select data-role-agent="${r.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
+              ${AGENTS.map(a=>`<option value="${a.id}" ${a.id===assigned?'selected':''}>${a.id}</option>`).join('')}
+            </select>
+          </div>
+          <textarea data-role-prompt="${r.id}" style="width:100%;min-height:110px;background:#09090b;color:#e5e7eb;border:1px solid #3f3f46;border-radius:6px;padding:8px;font-size:.78rem;">${escapeHtml(r.prompt)}</textarea>
+        </div>`;
+      }).join('');
+
+      workflowRolesEl.querySelectorAll('[data-role-agent]').forEach(el=>el.addEventListener('change',()=>{
+        roleAssignmentsByRole[el.dataset.roleAgent]=el.value; renderWorkflowPreview();
+      }));
+      workflowRolesEl.querySelectorAll('[data-role-prompt]').forEach(el=>el.addEventListener('change',()=>{
+        const r=workflowRoles.find(x=>x.id===el.dataset.rolePrompt); if(r) r.prompt=el.value; renderWorkflowPreview();
+      }));
+    }
+
+    function renderRecommendation(bundle) {
+      recommendedBundle = bundle;
+      recommendPanelEl.style.display = 'block';
+      recommendExplainEl.textContent = bundle.explainWhy || '';
+      recommendCostEl.textContent = `Estimated cost: ${bundle.costHint || 'medium'}`;
+      recommendJsonPreviewEl.textContent = JSON.stringify({ stages: bundle.stages, roles: bundle.roles, roleAssignmentsByRole: bundle.roleAssignmentsByRole }, null, 2);
     }
 
     function renderRuns(runs) {
@@ -557,8 +785,13 @@
         submitBtn.disabled = true;
         const payloadRoles = assignmentPayload();
         const payload = mode === 'workflow'
-          ? { ...payloadRoles, workflowStages: workflowPayload() }
-          : payloadRoles;
+          ? {
+              roleAssignments: payloadRoles,
+              workflowStages: workflowPayload(),
+              roles: workflowRoles,
+              roleAssignmentsByRole,
+            }
+          : { roleAssignments: payloadRoles };
         const { runId } = await createRun(goal, payload);
         goalInput.value = '';
         selectedRunId = runId;
@@ -581,6 +814,7 @@
     renderRoleJsonPreview();
     renderWorkflowAgents();
     renderWorkflowStages();
+    renderWorkflowRoles();
     renderWorkflowPreview();
     switchMode('roles');
 
@@ -589,11 +823,59 @@
     });
 
     addStageBtn.addEventListener('click', () => {
-      const id = `s${Date.now().toString(36).slice(-4)}`;
-      workflowStages.push({ id, type: 'research', agents: [], mergePolicy: 'none', notes: '' });
+      const roleKey = addStageTemplateEl?.value || 'research';
+      workflowStages.push(stageTemplate(roleKey));
       renderWorkflowStages();
       renderWorkflowPreview();
     });
+
+    async function detectOpenClawActive() {
+      try {
+        const res = await fetch(`${API}/runs?limit=1`);
+        if (!res.ok) throw new Error(String(res.status));
+        recommendBtn.disabled = false;
+        recommendStatusEl.textContent = 'OpenClaw active';
+      } catch {
+        recommendBtn.disabled = true;
+        recommendStatusEl.textContent = 'OpenClaw not detected, manual mode only';
+      }
+    }
+
+    recommendBtn.addEventListener('click', () => {
+      const goal = goalInput.value.trim();
+      if (!goal) {
+        recommendStatusEl.textContent = 'Enter goal first';
+        return;
+      }
+      const b = recommendBundle(goal);
+      renderRecommendation(b);
+    });
+
+    applyRecommendBtn.addEventListener('click', () => {
+      if (!recommendedBundle) return;
+      workflowStages = recommendedBundle.stages.map(s => ({ ...s }));
+      workflowRoles = recommendedBundle.roles.map(r => ({ ...r }));
+      roleAssignmentsByRole = { ...(recommendedBundle.roleAssignmentsByRole || {}) };
+      renderWorkflowStages();
+      renderWorkflowRoles();
+      renderWorkflowPreview();
+      switchMode('workflow');
+      document.querySelector('input[name="mode"][value="workflow"]').checked = true;
+      recommendStatusEl.textContent = 'Recommended workflow applied';
+    });
+
+    resetDefaultWorkflowBtn.addEventListener('click', () => {
+      const d = defaultWorkflowBundle();
+      workflowStages = d.stages.map(s => ({ ...s }));
+      workflowRoles = d.roles.map(r => ({ ...r }));
+      roleAssignmentsByRole = { ...(d.roleAssignmentsByRole || {}) };
+      renderWorkflowStages();
+      renderWorkflowRoles();
+      renderWorkflowPreview();
+      recommendStatusEl.textContent = 'Reset to default workflow';
+    });
+
+    detectOpenClawActive();
 
     fetchRuns().then(runs => {
       renderRuns(runs);

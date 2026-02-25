@@ -92,6 +92,11 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     const submittedOrder = JSON.stringify(runConfig.workflowStages.map((s: any) => s.id));
     const observedOrder = JSON.stringify(runConfig.workflowStages.map((s: any) => s.id));
     checks["stage order preserved"] = submittedOrder === observedOrder;
+
+    if (Array.isArray(runConfig?.roles) && runConfig.roles.length > 0) {
+      checks["roles exist and >=4"] = runConfig.roles.length >= 4;
+      checks["each role has non-empty prompt"] = runConfig.roles.every((r: any) => typeof r?.prompt === "string" && r.prompt.trim().split(/\n+/).filter(Boolean).length >= 8);
+    }
   }
 
   if (goal.toLowerCase().includes("phase 2 multi research demo")) {

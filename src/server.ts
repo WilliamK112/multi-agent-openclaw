@@ -25,6 +25,12 @@ type WorkflowStage = {
   notes?: string;
 };
 
+type RoleDef = {
+  id: string;
+  name: string;
+  prompt: string;
+};
+
 type RunRecord = {
   id: string;
   goal: string;
@@ -37,6 +43,8 @@ type RunRecord = {
   config?: {
     roleAssignments?: RoleAssignments;
     workflowStages?: WorkflowStage[];
+    roles?: RoleDef[];
+    roleAssignmentsByRole?: Record<string, string>;
   };
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
@@ -351,6 +359,12 @@ app.post("/run", (req, res) => {
   const roleAssignmentsRaw = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
   const roleAssignments = normalizeRoleAssignments(roleAssignmentsRaw);
   const workflowStages = normalizeWorkflowStages(req.body?.workflowStages);
+  const roles = Array.isArray(req.body?.roles)
+    ? req.body.roles.map((r: any) => ({ id: String(r?.id ?? ""), name: String(r?.name ?? ""), prompt: String(r?.prompt ?? "") })).filter((r: RoleDef) => r.id)
+    : undefined;
+  const roleAssignmentsByRole = req.body?.roleAssignmentsByRole && typeof req.body.roleAssignmentsByRole === "object"
+    ? Object.fromEntries(Object.entries(req.body.roleAssignmentsByRole).map(([k, v]) => [String(k), String(v ?? "none")]))
+    : undefined;
 
   const runId = makeRunId();
   const record: RunRecord = {
@@ -365,6 +379,8 @@ app.post("/run", (req, res) => {
     config: {
       roleAssignments,
       workflowStages,
+      roles,
+      roleAssignmentsByRole,
     },
     pendingStepId: null,
     pendingReason: null,
@@ -481,6 +497,9 @@ app.get("/runs", (req, res) => {
         const last = stages[stages.length - 1]?.type ?? "?";
         return `${stages.length} stages: ${first}→${last}`;
       })(),
+      roleSummary: {
+        count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
+      },
     }));
 
   return res.json(list);
