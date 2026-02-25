@@ -59,6 +59,13 @@ export async function qa(projectRoot: string, goal = "", runId = ""): Promise<QA
     checks["TEST_OUTPUT has exitCode=0"] = await containsText(testPath, "exitCode=0");
   }
 
+  if (goal.toLowerCase().includes("stage 3b")) {
+    const testPath = path.join(projectRoot, "docs/TEST_OUTPUT.txt");
+    checks["npm test exitCode=0"] = await containsText(testPath, "exitCode=0");
+    checks["TEST_OUTPUT contains exitCode=0"] = await containsText(testPath, "exitCode=0");
+    checks["smoke test file exists"] = await exists(path.join(projectRoot, "test/smoke.test.js"));
+  }
+
   let testRunEvidenceExtraIssues: string[] = [];
   if (goal.toLowerCase().includes("test run evidence")) {
     const marker = `TEST_RUN_${runId}`;

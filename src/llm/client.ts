@@ -196,6 +196,32 @@ function fakeResponse(req: LLMRequest): LLMResponse {
     };
   }
 
+  if (cleanGoal.toLowerCase().includes("stage 3b")) {
+    return {
+      text: JSON.stringify({
+        goal: cleanGoal,
+        steps: [
+          {
+            id: "step-1",
+            objective: "Run npm test and capture output",
+            tools: ["shell_run"],
+            success_criteria: "npm test exits with code 0",
+            inputs: { command: "__RUN_NPM_TEST_AND_WRITE__" },
+          },
+          {
+            id: "step-2",
+            objective: "Read docs/TEST_OUTPUT.txt",
+            tools: ["file_read"],
+            success_criteria: "test output file contains required fields",
+            inputs: { path: "docs/TEST_OUTPUT.txt" },
+          },
+        ],
+      }),
+      provider: "fake",
+      model: req.model,
+    };
+  }
+
   if (cleanGoal.toLowerCase().includes("test output demo")) {
     return {
       text: JSON.stringify({

@@ -156,6 +156,28 @@ function fallbackPlan(goal: string): Plan {
     };
   }
 
+  if (goal.toLowerCase().includes("stage 3b")) {
+    return {
+      goal,
+      steps: [
+        {
+          id: "step-1",
+          objective: "Run npm test and capture output",
+          tools: ["shell_run"],
+          success_criteria: "npm test exits with code 0",
+          inputs: { command: "__RUN_NPM_TEST_AND_WRITE__" },
+        },
+        {
+          id: "step-2",
+          objective: "Read docs/TEST_OUTPUT.txt",
+          tools: ["file_read"],
+          success_criteria: "test output file contains required fields",
+          inputs: { path: "docs/TEST_OUTPUT.txt" },
+        },
+      ],
+    };
+  }
+
   if (goal.toLowerCase().includes("test output demo")) {
     return {
       goal,
