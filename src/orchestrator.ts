@@ -19,7 +19,12 @@ export async function run(goal: string, projectRoot = process.cwd()): Promise<Ru
   const provider = getProvider();
   const model = getModel(provider);
 
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (provider === "claude" && !key) {
+    throw new Error("Missing ANTHROPIC_API_KEY. Put it in .env");
+  }
   console.log(`[Orchestrator] LLM provider=${provider}, model=${model}`);
+  console.log(`[Config] ANTHROPIC_API_KEY ${key ? "exists" : "missing"}`);
 
   const plan = await planner(goal, provider, model);
   console.log("\n[Planner] Plan JSON:");
