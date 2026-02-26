@@ -223,6 +223,24 @@
     </div>
 
     <div class="runs">
+      <div class="panel" style="margin-bottom:12px;">
+        <h3>Quality Trend Panel</h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <label>Window:
+            <select id="trend-window" style="margin-left:6px;background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:6px;padding:4px 8px;">
+              <option value="20">Last 20</option>
+              <option value="50" selected>Last 50</option>
+              <option value="100">Last 100</option>
+            </select>
+          </label>
+          <span id="trend-filter" style="font-size:.82rem;opacity:.9;">Filter: none</span>
+          <button class="clear-btn" id="clear-trend-filter">Clear Filter</button>
+        </div>
+        <div id="trend-summary" style="font-size:.83rem;line-height:1.5;"></div>
+        <div id="trend-reasons" style="margin-top:6px;font-size:.82rem;"></div>
+        <div id="trend-dimensions" style="margin-top:6px;font-size:.82rem;"></div>
+        <div id="trend-sparkline" style="margin-top:8px;font-family:ui-monospace,monospace;font-size:1rem;letter-spacing:1px;"></div>
+      </div>
       <div id="runs-list"></div>
       <div id="detail-panel" class="detail-panel" style="display: none;">
         <h3>Run details</h3>
@@ -236,6 +254,9 @@
     const API = window.location.origin;
     let selectedRunId = null;
     let pollInterval = null;
+    let allRunsCache = [];
+    let trendWindow = 50;
+    let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
@@ -284,6 +305,13 @@
     const roleJsonPreviewEl = document.getElementById('role-json-preview');
     const detailActions = document.getElementById('detail-actions');
     const detailContent = document.getElementById('detail-content');
+    const trendWindowEl = document.getElementById('trend-window');
+    const trendFilterEl = document.getElementById('trend-filter');
+    const clearTrendFilterBtn = document.getElementById('clear-trend-filter');
+    const trendSummaryEl = document.getElementById('trend-summary');
+    const trendReasonsEl = document.getElementById('trend-reasons');
+    const trendDimensionsEl = document.getElementById('trend-dimensions');
+    const trendSparklineEl = document.getElementById('trend-sparkline');
     const roleBoardEl = document.getElementById('role-board');
     const workflowBoardEl = document.getElementById('workflow-board');
     const workflowAgentsEl = document.getElementById('workflow-available-agents');
@@ -708,12 +736,61 @@
       recommendJsonPreviewEl.textContent = JSON.stringify({ stages: bundle.stages, roles: bundle.roles, roleAssignmentsByRole: bundle.roleAssignmentsByRole }, null, 2);
     }
 
+    function spark(values, gates) {
+      const bars = '▁▂▃▄▅▆▇█';
+      if (!values.length) return '—';
+      const min = Math.min(...values), max = Math.max(...values);
+      return values.map((v, i) => {
+        const idx = max === min ? 4 : Math.max(0, Math.min(7, Math.round(((v - min) / (max - min)) * 7)));
+        const ch = bars[idx];
+        return gates && gates[i] === false ? `<span style="color:#fca5a5">${ch}</span>` : ch;
+      }).join('');
+    }
+
+    function renderTrendPanel(runsWindow) {
+      const filterText = trendFilter ? `${trendFilter.type}=${trendFilter.value}` : 'none';
+      trendFilterEl.textContent = `Filter: ${filterText}`;
+      const gates = runsWindow.filter(r => r.gate !== null && r.gate !== undefined).map(r => !!r.gate);
+      const pass = gates.filter(Boolean).length;
+      const total = gates.length;
+      const scores = runsWindow.map(r => Number(r.v2_score)).filter(v => Number.isFinite(v));
+      const sorted = [...scores].sort((a,b)=>a-b);
+      const mean = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+      const median = scores.length ? (sorted[Math.floor((sorted.length-1)/2)] + sorted[Math.ceil((sorted.length-1)/2)]) / 2 : null;
+      const recent10 = scores.slice(0,10), prev10 = scores.slice(10,20);
+      const m1 = recent10.length ? recent10.reduce((a,b)=>a+b,0)/recent10.length : null;
+      const m2 = prev10.length ? prev10.reduce((a,b)=>a+b,0)/prev10.length : null;
+      const dMean = (m1!=null && m2!=null) ? (m1-m2) : null;
+      const best = scores.length ? Math.max(...scores) : null;
+      const worst = scores.length ? Math.min(...scores) : null;
+      trendSummaryEl.innerHTML = `Pass Rate: <strong>${total?`${pass}/${total} (${Math.round(pass*100/total)}%)`:'—'}</strong> · Mean: <strong>${mean?.toFixed(2) ?? '—'}</strong> · Median: <strong>${median?.toFixed(2) ?? '—'}</strong> · Δmean(Recent10-Prev10): <strong>${dMean==null?'—':(dMean>=0?'+':'')+dMean.toFixed(2)}</strong> · Best/Worst: <strong>${best??'—'}/${worst??'—'}</strong>`;
+
+      const reasonCounts = {};
+      runsWindow.forEach(r => (r.gateReasons||[]).forEach(x => reasonCounts[x] = (reasonCounts[x]||0)+1));
+      const topReasons = Object.entries(reasonCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+      trendReasonsEl.innerHTML = `Gate Failure Reasons Top3: ${topReasons.length ? topReasons.map(([k,v]) => `<button class="clear-btn" data-filter-reason="${escapeHtml(k)}">${escapeHtml(k)}: ${v} (${Math.round(v*100/Math.max(1,runsWindow.length))}%)</button>`).join(' ') : '—'}`;
+
+      const dimCounts = {};
+      runsWindow.forEach(r => { const d = r.top_delta?.dimension; if (d) dimCounts[d] = (dimCounts[d]||0)+1; });
+      const topDims = Object.entries(dimCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+      trendDimensionsEl.innerHTML = `Improvement Focus Top3: ${topDims.length ? topDims.map(([k,v]) => `<button class="clear-btn" data-filter-dim="${escapeHtml(k)}">${escapeHtml(k)}: ${v}</button>`).join(' ') : '—'}`;
+      trendSparklineEl.innerHTML = `Score sparkline: ${spark(runsWindow.map(r=>Number(r.v2_score)).filter(v=>Number.isFinite(v)).slice(0,50), runsWindow.map(r=>r.gate).slice(0,50))}`;
+
+      trendReasonsEl.querySelectorAll('[data-filter-reason]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'gateReason',value:el.dataset.filterReason}; renderRuns(allRunsCache); }));
+      trendDimensionsEl.querySelectorAll('[data-filter-dim]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'topDelta',value:el.dataset.filterDim}; renderRuns(allRunsCache); }));
+    }
+
     function renderRuns(runs) {
-      if (!runs.length) {
-        runsList.innerHTML = '<div class="empty">No runs yet. Enter a goal and click Run.</div>';
+      allRunsCache = runs;
+      let view = runs.slice(0, trendWindow);
+      if (trendFilter?.type === 'gateReason') view = view.filter(r => (r.gateReasons||[]).includes(trendFilter.value));
+      if (trendFilter?.type === 'topDelta') view = view.filter(r => (r.top_delta?.dimension || '') === trendFilter.value);
+      renderTrendPanel(runs.slice(0, trendWindow));
+      if (!view.length) {
+        runsList.innerHTML = '<div class="empty">No runs match current filter.</div>';
         return;
       }
-      runsList.innerHTML = runs.map(r => `
+      runsList.innerHTML = view.map(r => `
         <div class="run-card ${r.id === selectedRunId ? 'selected' : ''}" data-id="${r.id}">
           <div class="run-header">
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
@@ -958,6 +1035,15 @@
       renderWorkflowRoles();
       renderWorkflowPreview();
       recommendStatusEl.textContent = 'Reset to default workflow';
+    });
+
+    trendWindowEl.addEventListener('change', () => {
+      trendWindow = Number(trendWindowEl.value || 50);
+      renderRuns(allRunsCache);
+    });
+    clearTrendFilterBtn.addEventListener('click', () => {
+      trendFilter = null;
+      renderRuns(allRunsCache);
     });
 
     detectOpenClawActive();
