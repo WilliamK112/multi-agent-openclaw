@@ -59,9 +59,15 @@ type RunRecord = {
     researchOutputs?: Array<{ agent: string; text: string }>;
     researchSummary?: string;
     docxPath?: string | null;
+    docxExists?: boolean;
     exportMdPath?: string;
+    exportStatus?: string;
     judge_v1?: any;
     judge_v2?: any;
+    judge_delta?: Record<string, number> | null;
+    top_delta_raw?: { dimension: string | null; delta: number | null };
+    top_delta_effective?: { dimension: string | null; delta: number | null };
+    gateReasons?: string[];
     revision_report?: any;
     sources_count?: number;
     unique_domains?: number;
@@ -177,6 +183,39 @@ function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs
 
 const runIndexPath = path.join(process.cwd(), "docs", "runs_index.jsonl");
 
+function getTopDeltaFromMap(deltaMap: any): { dimension: string | null; delta: number | null } {
+  if (!deltaMap || typeof deltaMap !== "object") return { dimension: null, delta: null };
+  const entries = Object.entries(deltaMap)
+    .map(([k, v]) => [k, Number(v)] as const)
+    .filter(([, v]) => Number.isFinite(v))
+    .sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return { dimension: null, delta: null };
+  return { dimension: String(entries[0][0]), delta: Number(entries[0][1]) };
+}
+
+function getEffectiveTopDelta(judgeDelta: any, antiOverfittingApplied: boolean): {
+  raw: { dimension: string | null; delta: number | null };
+  effective: { dimension: string | null; delta: number | null };
+} {
+  const raw = getTopDeltaFromMap(judgeDelta);
+  if (!antiOverfittingApplied) return { raw, effective: raw };
+
+  const weights: Record<string, number> = {
+    evidence_specificity: 2,
+    citations_integrity: 2,
+    counterarguments_nuance: 0.5,
+  };
+  const weighted = Object.fromEntries(
+    Object.entries(judgeDelta || {}).map(([k, v]) => {
+      const n = Number(v);
+      const w = Number(weights[k] ?? 1);
+      return [k, Number.isFinite(n) ? n * w : n];
+    })
+  );
+  const effective = getTopDeltaFromMap(weighted);
+  return { raw, effective };
+}
+
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
 }
@@ -190,23 +229,19 @@ async function appendRunIndexMeta(run: RunRecord) {
     try { return JSON.parse(ln).runId === run.id; } catch { return false; }
   });
   if (exists) return;
+  const topRaw = run.artifacts?.top_delta_raw ?? getTopDeltaFromMap(run.artifacts?.judge_delta);
+  const topEffective = run.artifacts?.top_delta_effective ?? topRaw;
   const meta = {
     runId: run.id,
     createdAt: run.createdAt,
     gate: run.artifacts?.judge_v2?.must_fix_gate ?? null,
     v2_score: run.artifacts?.judge_v2?.overall_score ?? null,
-    top_delta_dim: (() => {
-      const d = run.artifacts?.judge_delta;
-      if (!d || typeof d !== "object") return null;
-      const e = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1])[0];
-      return e?.[0] ?? null;
-    })(),
-    top_delta_val: (() => {
-      const d = run.artifacts?.judge_delta;
-      if (!d || typeof d !== "object") return null;
-      const e = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1])[0];
-      return e?.[1] ?? null;
-    })(),
+    top_delta_dim: topRaw?.dimension ?? null,
+    top_delta_val: topRaw?.delta ?? null,
+    top_delta_raw_dim: topRaw?.dimension ?? null,
+    top_delta_raw_val: topRaw?.delta ?? null,
+    top_delta_effective_dim: topEffective?.dimension ?? null,
+    top_delta_effective_val: topEffective?.delta ?? null,
     gateReasons: Array.isArray(run.artifacts?.gateReasons) ? run.artifacts.gateReasons : [],
     anti_overfitting_applied: Boolean(run.config?.anti_overfitting_applied),
     sources_count: Number(run.artifacts?.sources_count ?? 0),
@@ -409,6 +444,7 @@ async function continueRun(runId: string) {
     const judge_delta = judge_v1 && judge_v2
       ? Object.fromEntries(dims.map((k) => [k, Number(judge_v2?.dimension_scores?.[k]?.score ?? 0) - Number(judge_v1?.dimension_scores?.[k]?.score ?? 0)]))
       : null;
+    const { raw: top_delta_raw, effective: top_delta_effective } = getEffectiveTopDelta(judge_delta, Boolean(run.config?.anti_overfitting_applied));
     const gateReasons = (() => {
       const g = judge_v2?.gate_reasons ?? {};
       const out: string[] = [];
@@ -446,6 +482,8 @@ async function continueRun(runId: string) {
       judge_v1,
       judge_v2,
       judge_delta,
+      top_delta_raw,
+      top_delta_effective,
       gateReasons,
       revision_report,
       sources_count: urls.length,
@@ -636,13 +674,9 @@ app.get("/runs", (req, res) => {
       },
       docxPath: r.artifacts?.docxPath ?? null,
       v2_score: r.artifacts?.judge_v2?.overall_score ?? null,
-      top_delta: (() => {
-        const d = r.artifacts?.judge_delta;
-        if (!d || typeof d !== "object") return null;
-        const entries = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1]);
-        if (!entries.length) return null;
-        return { dimension: entries[0][0], delta: entries[0][1] };
-      })(),
+      top_delta_raw: r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta),
+      top_delta_effective: r.artifacts?.top_delta_effective ?? (r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta)),
+      top_delta: r.artifacts?.top_delta_effective ?? (r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta)),
       gate: r.artifacts?.judge_v2?.must_fix_gate ?? null,
       gateReasons: Array.isArray(r.artifacts?.gateReasons) ? r.artifacts.gateReasons.slice(0,2) : [],
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
@@ -675,13 +709,15 @@ app.post("/quality/export-csv", async (req, res) => {
     let parsed = raw.split(/\n+/).filter(Boolean).map((ln) => { try { return JSON.parse(ln); } catch { return null; } }).filter(Boolean) as any[];
     parsed.sort((a,b) => String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
     if (filterType === "gateReason" && filterValue) parsed = parsed.filter((r) => Array.isArray(r.gateReasons) && r.gateReasons.includes(filterValue));
-    if (filterType === "topDelta" && filterValue) parsed = parsed.filter((r) => String(r.top_delta_dim ?? "") === filterValue);
+    if (filterType === "topDelta" && filterValue) parsed = parsed.filter((r) => String(r.top_delta_effective_dim ?? r.top_delta_dim ?? "") === filterValue);
     rows = parsed.slice(0, windowN || 50).map((r) => ({
       id: r.runId,
       createdAt: r.createdAt,
       gate: r.gate,
       v2_score: r.v2_score,
-      top_delta: { dimension: r.top_delta_dim, delta: r.top_delta_val },
+      top_delta_raw: { dimension: r.top_delta_raw_dim ?? r.top_delta_dim, delta: r.top_delta_raw_val ?? r.top_delta_val },
+      top_delta_effective: { dimension: r.top_delta_effective_dim ?? r.top_delta_dim, delta: r.top_delta_effective_val ?? r.top_delta_val },
+      top_delta: { dimension: r.top_delta_effective_dim ?? r.top_delta_dim, delta: r.top_delta_effective_val ?? r.top_delta_val },
       gateReasons: r.gateReasons || [],
       anti_overfitting_applied: r.anti_overfitting_applied ?? false,
       sources_count: r.sources_count ?? "",
@@ -698,9 +734,9 @@ app.post("/quality/export-csv", async (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const outPath = path.join(qualityDir, `quality_window_${windowN}_${ts}.csv`);
   const esc = (v: any) => `"${String(v ?? "").replaceAll('"','""')}"`;
-  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
+  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","top_delta_effective_dim","top_delta_effective_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
   const lines = rows.map((r: any) => [
-    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta?.dimension ?? ""), esc(r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
+    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_effective?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_effective?.delta ?? r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
   ].join(","));
   await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });

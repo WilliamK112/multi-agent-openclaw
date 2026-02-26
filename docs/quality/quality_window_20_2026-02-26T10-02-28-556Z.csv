@@ -1,0 +1,4 @@
+runId,createdAt,gate,v2_score,top_delta_dim,top_delta_val,top_delta_effective_dim,top_delta_effective_val,gateReasons_joined,anti_overfitting_applied,sources_count,unique_domains,duplicate_ratio
+"run_1772100147542_9gubrl","2026-02-26T10:02:27.542Z","false","25","counterarguments_nuance","3","evidence_specificity","4","minSources_not_met|source_diversity_not_met","true","2","2","0"
+"run_1772100146462_mz6sr6","2026-02-26T10:02:26.462Z","true","26","counterarguments_nuance","3","evidence_specificity","4","","true","10","10","0"
+"run_1772100145408_d1rwjv","2026-02-26T10:02:25.408Z","true","26","counterarguments_nuance","3","counterarguments_nuance","3","","false","10","10","0"
