@@ -352,22 +352,37 @@ async function continueRun(runId: string) {
     const judge_delta = judge_v1 && judge_v2
       ? Object.fromEntries(dims.map((k) => [k, Number(judge_v2?.dimension_scores?.[k]?.score ?? 0) - Number(judge_v1?.dimension_scores?.[k]?.score ?? 0)]))
       : null;
-    const gateReasons = judge_v2?.gate_reasons
-      ? Object.entries(judge_v2.gate_reasons).filter(([, v]) => !v).map(([k]) => k)
-      : [];
-    const docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
+    const gateReasons = (() => {
+      const g = judge_v2?.gate_reasons ?? {};
+      const out: string[] = [];
+      if (g.overall_threshold === false) out.push("overall_v2 below required threshold");
+      if (g.overall_improved_by_2 === false) out.push("overall_v2 not >= overall_v1 + 2");
+      if (g.lowest_two_improved === false) out.push("weakest dimensions improvement below required");
+      if (g.sources_ok === false) out.push("minSources not met");
+      if (g.words_ok === false) out.push("minWords not met");
+      if (g.force_gate_fail === false) out.push("force_gate_fail");
+      return out;
+    })();
+    const gatePassed = Boolean(judge_v2?.must_fix_gate);
+    let docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
+    if (!gatePassed && docxExists) {
+      await fsp.unlink(expectedDocx).catch(() => undefined);
+      docxExists = false;
+      pushLog(run, "export:docx_removed_due_to_gate_fail");
+    }
     run.artifacts = {
       ...(run.artifacts ?? {}),
-      docxPath: expectedDocx,
-      docxExists,
+      docxPath: gatePassed && docxExists ? expectedDocx : null,
+      docxExists: gatePassed && docxExists,
       exportMdPath: expectedMd,
       judge_v1,
       judge_v2,
       judge_delta,
       gateReasons,
       revision_report,
+      exportStatus: gatePassed ? "exported" : "draft_only_not_exported",
     };
-    pushLog(run, `export:docx_path=${expectedDocx}`);
+    pushLog(run, gatePassed && docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
     run.qa = await qa(process.cwd(), run.goal, run.id, run.config, run.artifacts);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
@@ -554,13 +569,25 @@ app.post("/runs/:runId/open-output", async (req, res) => {
   const run = runs.get(req.params.runId);
   if (!run) return res.status(404).json({ error: "Run not found" });
   const target = run.artifacts?.docxPath;
-  if (!target) return res.status(400).json({ error: "No docx output path for this run" });
-  const exists = await import("node:fs/promises").then((m) => m.stat(target).then(() => true).catch(() => false));
-  if (!exists) return res.status(404).json({ error: "File not found" });
+  if (!target) return res.status(400).json({ error: "No exported docx for this run" });
 
-  cpExec(`open "${target.replace(/"/g, '\\"')}"`, (err) => {
-    if (err) return res.status(500).json({ error: `Failed to open output: ${err.message}` });
-    return res.json({ ok: true, path: target });
+  const fsp = await import("node:fs/promises");
+  const real = await fsp.realpath(target).catch(() => null);
+  if (!real) return res.status(404).json({ error: "File not found" });
+
+  const exportsRoot = path.resolve(process.cwd(), "docs/exports") + path.sep;
+  const allowDesktop = String(process.env.ALLOW_OPEN_OUTPUT_DESKTOP ?? "false").toLowerCase() === "true";
+  const desktopRoot = path.resolve(process.env.HOME ?? "", "Desktop") + path.sep;
+  const inExports = real.startsWith(exportsRoot);
+  const inDesktop = allowDesktop && real.startsWith(desktopRoot);
+  if (!inExports && !inDesktop) {
+    pushLog(run, "open_output: denied (path outside whitelist)");
+    return res.status(403).json({ error: "Open denied by path policy" });
+  }
+
+  cpExec(`open "${real.replace(/"/g, '\\"')}"`, (err) => {
+    if (err) return res.status(500).json({ error: "Failed to open output" });
+    return res.json({ ok: true, path: real });
   });
 });
 

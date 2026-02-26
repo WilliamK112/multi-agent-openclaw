@@ -783,6 +783,8 @@
       }
       if (docxPath) {
         content += `<p><strong>DOCX:</strong> <code>${escapeHtml(docxPath)}</code> <button class="open-output-btn" ${docxExists?'':'disabled title="File not found"'} data-open-output-detail="${escapeHtml(run.id)}">Open DOCX</button> ${docxExists?'':'<span style="color:#fca5a5;">File not found</span>'}</p>`;
+      } else if (j2?.must_fix_gate === false) {
+        content += `<p style="color:#fca5a5;"><strong>Not exported because gate failed.</strong> Draft only / not exported.</p>`;
       }
       if (j1 || j2) {
         const dims = ['thesis_prompt','structure_coherence','evidence_specificity','counterarguments_nuance','clarity_style','citations_integrity'];
