@@ -704,6 +704,14 @@ async function continueRun(runId: string) {
     const fsp = await import("node:fs/promises");
     const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");
     let finalMdText = await fsp.readFile(expectedMd, "utf8").catch(() => "");
+    // final_clean: remove internal pipeline/debug blocks from export body
+    finalMdText = finalMdText
+      .replace(/\n\nANTI_MODE_PRIORITIZE_EVIDENCE[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
+      .replace(/\n##\s+Evidence Injection Plan[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
+      .replace(/\n##\s+Revision Actions Based on Judge[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
+      .replace(/\n##\s+Added Sources \(new\)[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
+      .replace(/\n##\s+References Addendum[\s\S]*$/gi, "");
+    await fsp.writeFile(expectedMd, finalMdText, "utf8").catch(() => undefined);
     const draftMdText = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.draft.md`), "utf8").catch(() => "");
     const providerAvailability = imageProviderAvailability();
     let imageArtifacts: any = { availability: providerAvailability, candidates: [], selected: [] };
@@ -764,7 +772,13 @@ async function continueRun(runId: string) {
       }
       if (sourceCountFinal < 6 || g.sources_ok === false) out.push("minSources_not_met");
       if (g.words_ok === false || wordCount < 650) out.push("minWords_not_met");
+      const topicMismatch = /meaning of life/i.test(run.goal) && !/meaning of life|existential|aristotle|sartre|camus|frankl/i.test(finalMdText);
+      const repeatedFiller = ((finalMdText.match(/\bAdditional\s+[a-z-]+/gi) || []).length) >= 3;
+      const internalLeak = /Evidence Injection Plan|Revision Actions Based on Judge|ANTI_MODE_PRIORITIZE_EVIDENCE|References Addendum/i.test(finalMdText);
       if (repeat.repeat_flags) out.push(...repeat.reasons);
+      if (topicMismatch) out.push("topic_mismatch_with_goal");
+      if (repeatedFiller) out.push("repeated_filler_phrases_detected");
+      if (internalLeak) out.push("internal_pipeline_text_leaked_to_final");
       if (!paraEval.checks.intro_in_range) out.push("intro_length_out_of_range");
       if (!paraEval.checks.body_longer_than_intro) out.push("body_not_longer_than_intro");
       if (!paraEval.checks.two_body_ge_200) out.push("body_paragraphs_too_uniform");
