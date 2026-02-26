@@ -771,30 +771,62 @@
         const list = run.config.workflowStages.map((s, i) => `${i+1}. ${s.id} (${s.type}) agents=${(s.agents||[]).join(',')} merge=${s.mergePolicy}`).join('\n');
         content += `<p><strong>Workflow Stages:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(list || '(none)')}</pre>`;
       }
-      if (run.artifacts) content += `<p><strong>Artifacts:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.artifacts, null, 2))}</pre>`;
+      if (run.artifacts) content += `<details><summary><strong>Artifacts (raw)</strong></summary><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.artifacts, null, 2))}</pre></details>`;
       const j1 = run.artifacts?.judge_v1;
       const j2 = run.artifacts?.judge_v2;
       const rr = run.artifacts?.revision_report;
+      const gateReasons = run.artifacts?.gateReasons || [];
+      const docxPath = run.artifacts?.docxPath || '';
+      const docxExists = !!run.artifacts?.docxExists;
+      if (j2?.must_fix_gate === false) {
+        content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
+      }
+      if (docxPath) {
+        content += `<p><strong>DOCX:</strong> <code>${escapeHtml(docxPath)}</code> <button class="open-output-btn" ${docxExists?'':'disabled title="File not found"'} data-open-output-detail="${escapeHtml(run.id)}">Open DOCX</button> ${docxExists?'':'<span style="color:#fca5a5;">File not found</span>'}</p>`;
+      }
       if (j1 || j2) {
         const dims = ['thesis_prompt','structure_coherence','evidence_specificity','counterarguments_nuance','clarity_style','citations_integrity'];
-        const rows = dims.map(k => {
+        const labels = {
+          thesis_prompt:'Thesis', structure_coherence:'Structure', evidence_specificity:'Evidence', counterarguments_nuance:'Counterarguments', clarity_style:'Clarity', citations_integrity:'Citations'
+        };
+        const deltas = dims.map(k => ({ k, d: Number(j2?.dimension_scores?.[k]?.score ?? 0) - Number(j1?.dimension_scores?.[k]?.score ?? 0) }));
+        const top2 = deltas.filter(x=>x.d>0).sort((a,b)=>b.d-a.d).slice(0,2).map(x=>x.k);
+        const downs = deltas.filter(x=>x.d<0).map(x=>x.k);
+        const rowsHtml = dims.map(k => {
           const a = Number(j1?.dimension_scores?.[k]?.score ?? 0);
           const b = Number(j2?.dimension_scores?.[k]?.score ?? 0);
           const d = b - a;
-          return `${k}: v1=${a} | v2=${b} | Δ=${d>=0?'+':''}${d}`;
-        }).join('\n');
-        const weak = (j2?.weaknesses_top3 || j1?.weaknesses_top3 || []).join(', ');
-        const instr = (j2?.revision_instructions || j1?.revision_instructions || []).slice(0,8).map((x,i)=>`${i+1}. ${x}`).join('\n');
-        const gate = j2?.must_fix_gate;
-        const gateReasons = JSON.stringify(j2?.gate_reasons || {}, null, 2);
-        content += `<p><strong>Judge Results:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.83rem;">Judge v1 overall: ${escapeHtml(String(j1?.overall_score ?? 'N/A'))}\nJudge v2 overall: ${escapeHtml(String(j2?.overall_score ?? 'N/A'))}\n\nImprovement Summary\n${escapeHtml(rows)}\n\nWeaknesses Top3\n${escapeHtml(weak || '(none)')}\n\nRevision Instructions\n${escapeHtml(instr || '(none)')}\n\nGate status: ${escapeHtml(String(gate))}\nGate reasons: ${escapeHtml(gateReasons)}</pre>`;
-      }
-      if (rr) {
-        content += `<p><strong>Revision Report:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.83rem;">${escapeHtml(JSON.stringify(rr, null, 2))}</pre>`;
+          const highlight = top2.includes(k) ? 'color:#86efac;font-weight:700;' : (downs.includes(k)?'color:#fca5a5;font-weight:700;':'');
+          return `<tr><td>${labels[k]}</td><td>${a}</td><td>${b}</td><td style="${highlight}">${d>=0?'+':''}${d}</td></tr>`;
+        }).join('');
+        const weak = (j1?.weaknesses_top3 || []).map(String);
+        const instr = (j1?.revision_instructions || []).slice(0,8).map((x,i)=>`${i+1}. ${x}`).join('\n');
+        const revSummary = rr ? [
+          `lowest two: ${(rr.lowest_two_dimensions||[]).join(', ')}`,
+          ...((rr.concrete_changes||[]).slice(0,2).map((x)=>`change: ${x}`)),
+          ...((rr.added_sources||[]).slice(0,3).map((x)=>`source: ${x}`)),
+        ] : [];
+        content += `<p><strong>Judge Results</strong></p>
+          <div style="background:#09090b;padding:12px;border-radius:8px;overflow:auto;font-size:0.83rem;">
+            <div><strong>v1 overall:</strong> ${escapeHtml(String(j1?.overall_score ?? 'N/A'))} &nbsp; | &nbsp; <strong>v2 overall:</strong> ${escapeHtml(String(j2?.overall_score ?? 'N/A'))}</div>
+            <table style="width:100%;margin-top:8px;border-collapse:collapse;font-size:0.8rem;"><thead><tr><th align="left">Dimension</th><th>v1</th><th>v2</th><th>Δ</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+            <div style="margin-top:8px;"><strong>Weaknesses Top3 (v1):</strong> ${escapeHtml(weak.join(', ') || '(none)')}</div>
+            <details style="margin-top:6px;"><summary>Revision Instructions (v1)</summary><pre style="white-space:pre-wrap;">${escapeHtml(instr || '(none)')}</pre></details>
+            <details style="margin-top:6px;"><summary>Revision Summary</summary><pre style="white-space:pre-wrap;">${escapeHtml(revSummary.join('\n') || '(none)')}</pre></details>
+          </div>`;
       }
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
       detailContent.innerHTML = content;
+      detailContent.querySelectorAll('[data-open-output-detail]').forEach(el => {
+        el.addEventListener('click', async () => {
+          try {
+            await openRunOutput(el.dataset.openOutputDetail);
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
     }
 
     async function selectRun(id) {

@@ -54,7 +54,8 @@ function parsePaperRequirements(goal: string) {
   const desktopPath = /bird habitat/i.test(goal)
     ? "/Users/William/Desktop/Bird_Habitat_Madison_WI_500words.docx"
     : `/Users/William/Desktop/${(goal.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 48) || "paper")}.docx`;
-  return { minWords, needsDesktop, minSources, highQualityReview, keywords, desktopPath };
+  const forceGateFail = /force_gate_fail/i.test(goal);
+  return { minWords, needsDesktop, minSources, highQualityReview, keywords, desktopPath, forceGateFail };
 }
 
 function countWords(text: string) {
@@ -101,6 +102,8 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
     improvedEnough = deltas.some((d)=>d>=2) || deltas.every((d)=>d>=1);
   }
   const overallImproved = previous?.overall_score != null ? overall >= (Number(previous.overall_score) + 2) : true;
+  const gateBase = overall >= passThreshold && sources >= req.minSources && words >= req.minWords && overallImproved && improvedEnough;
+  const must_fix_gate = req.forceGateFail ? false : gateBase;
   return {
     rubric: "Prometheus-style rubric with 6 dimensions (plus LangGraph-inspired actionable revision instructions)",
     overall_score: overall,
@@ -108,13 +111,14 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
     weaknesses_top3: weaknesses,
     revision_instructions,
     lowest_two_dimensions: lowestTwoCurrent,
-    must_fix_gate: overall >= passThreshold && sources >= req.minSources && words >= req.minWords && overallImproved && improvedEnough,
+    must_fix_gate,
     gate_reasons: {
       overall_threshold: overall >= passThreshold,
       overall_improved_by_2: overallImproved,
       lowest_two_improved: improvedEnough,
       sources_ok: sources >= req.minSources,
       words_ok: words >= req.minWords,
+      force_gate_fail: !req.forceGateFail,
     },
     metrics: { word_count: words, sources_count: sources, min_words: req.minWords, min_sources: req.minSources },
   };

@@ -348,12 +348,23 @@ async function continueRun(runId: string) {
     const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
     const judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
     const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
+    const dims = ["thesis_prompt", "structure_coherence", "evidence_specificity", "counterarguments_nuance", "clarity_style", "citations_integrity"];
+    const judge_delta = judge_v1 && judge_v2
+      ? Object.fromEntries(dims.map((k) => [k, Number(judge_v2?.dimension_scores?.[k]?.score ?? 0) - Number(judge_v1?.dimension_scores?.[k]?.score ?? 0)]))
+      : null;
+    const gateReasons = judge_v2?.gate_reasons
+      ? Object.entries(judge_v2.gate_reasons).filter(([, v]) => !v).map(([k]) => k)
+      : [];
+    const docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
     run.artifacts = {
       ...(run.artifacts ?? {}),
       docxPath: expectedDocx,
+      docxExists,
       exportMdPath: expectedMd,
       judge_v1,
       judge_v2,
+      judge_delta,
+      gateReasons,
       revision_report,
     };
     pushLog(run, `export:docx_path=${expectedDocx}`);
@@ -539,11 +550,13 @@ app.get("/runs/:runId", (req, res) => {
   return res.json(run);
 });
 
-app.post("/runs/:runId/open-output", (req, res) => {
+app.post("/runs/:runId/open-output", async (req, res) => {
   const run = runs.get(req.params.runId);
   if (!run) return res.status(404).json({ error: "Run not found" });
   const target = run.artifacts?.docxPath;
   if (!target) return res.status(400).json({ error: "No docx output path for this run" });
+  const exists = await import("node:fs/promises").then((m) => m.stat(target).then(() => true).catch(() => false));
+  if (!exists) return res.status(404).json({ error: "File not found" });
 
   cpExec(`open "${target.replace(/"/g, '\\"')}"`, (err) => {
     if (err) return res.status(500).json({ error: `Failed to open output: ${err.message}` });
