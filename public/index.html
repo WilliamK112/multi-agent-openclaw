@@ -723,6 +723,7 @@
             </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${r.top_delta ? `${escapeHtml(String(r.top_delta.dimension))}:${escapeHtml(String(r.top_delta.delta))}` : '—'} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {

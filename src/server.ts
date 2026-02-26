@@ -358,8 +358,8 @@ async function continueRun(runId: string) {
       if (g.overall_threshold === false) out.push("overall_v2 below required threshold");
       if (g.overall_improved_by_2 === false) out.push("overall_v2 not >= overall_v1 + 2");
       if (g.lowest_two_improved === false) out.push("weakest dimensions improvement below required");
-      if (g.sources_ok === false) out.push("minSources not met");
-      if (g.words_ok === false) out.push("minWords not met");
+      if (g.sources_ok === false) out.push("minSources_not_met");
+      if (g.words_ok === false) out.push("minWords_not_met");
       if (g.force_gate_fail === false) out.push("force_gate_fail");
       if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
       return out;
@@ -553,6 +553,16 @@ app.get("/runs", (req, res) => {
         count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
       },
       docxPath: r.artifacts?.docxPath ?? null,
+      v2_score: r.artifacts?.judge_v2?.overall_score ?? null,
+      top_delta: (() => {
+        const d = r.artifacts?.judge_delta;
+        if (!d || typeof d !== "object") return null;
+        const entries = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1]);
+        if (!entries.length) return null;
+        return { dimension: entries[0][0], delta: entries[0][1] };
+      })(),
+      gate: r.artifacts?.judge_v2?.must_fix_gate ?? null,
+      gateReasons: Array.isArray(r.artifacts?.gateReasons) ? r.artifacts.gateReasons.slice(0,2) : [],
     }));
 
   return res.json(list);

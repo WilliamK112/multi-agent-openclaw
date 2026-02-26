@@ -47,7 +47,9 @@ function execCmd(command: string, cwd: string): Promise<{ ok: boolean; stdout: s
 function parsePaperRequirements(goal: string) {
   const minWords = Number((goal.match(/(\d{3,4})\s*word/i)?.[1] ?? "800"));
   const needsDesktop = /desktop/i.test(goal);
-  const minSources = /research|sources?|引用/i.test(goal) ? 8 : 3;
+  const minSourcesOverride = Number(goal.match(/minSources\s*=\s*(\d{1,2})/i)?.[1] ?? "0");
+  const minSources = minSourcesOverride > 0 ? minSourcesOverride : (/research|sources?|引用/i.test(goal) ? 8 : 3);
+  const maxSearchQueriesPerRun = Number(goal.match(/maxSearchQueriesPerRun\s*=\s*(\d{1,2})/i)?.[1] ?? "6");
   const highQualityReview = /high_quality_review\s*=\s*true/i.test(goal);
   const lowered = goal.toLowerCase();
   const keywords = ["madison", "wisconsin", "bird", "habitat"].filter((k) => lowered.includes(k));
@@ -55,7 +57,7 @@ function parsePaperRequirements(goal: string) {
     ? "/Users/William/Desktop/Bird_Habitat_Madison_WI_500words.docx"
     : `/Users/William/Desktop/${(goal.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 48) || "paper")}.docx`;
   const forceGateFail = /force_gate_fail/i.test(goal);
-  return { minWords, needsDesktop, minSources, highQualityReview, keywords, desktopPath, forceGateFail };
+  return { minWords, needsDesktop, minSources, maxSearchQueriesPerRun, highQualityReview, keywords, desktopPath, forceGateFail };
 }
 
 function countWords(text: string) {
@@ -254,7 +256,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
         const references = [
           "https://www.brookings.edu", "https://www.pewresearch.org", "https://www.oecd.org", "https://www.un.org", "https://www.worldbank.org",
           "https://www.rand.org", "https://www.nber.org", "https://www.cdc.gov", "https://www.nih.gov", "https://www.gao.gov", "https://www.congress.gov"
-        ].slice(0, Math.max(10, req.minSources));
+        ].slice(0, req.maxSearchQueriesPerRun === 0 ? 2 : Math.max(10, req.minSources));
         const content = [
           `# Research Pack`,
           ``,
@@ -295,7 +297,8 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
         const unit = `This paragraph analyzes ${topic} through institutional incentives, budget accounting, externalized costs, and distributional impacts. It compares short-term administrative efficiency claims against long-term social trust effects, legal compliance burdens, and cross-jurisdiction spillovers. It distinguishes correlation from causation and marks evidence limits.`;
         const targetParas = Math.max(12, Math.ceil(req.minWords / 45));
         const paragraphs = Array.from({ length: targetParas }, (_, i) => `Paragraph ${i + 1}: ${unit}`).join("\n\n");
-        const refs = Array.from({ length: Math.max(10, req.minSources) }, (_, i) => `- Reference ${i + 1}: Source ${i + 1}`).join("\n");
+        const refsTarget = req.maxSearchQueriesPerRun === 0 ? Math.min(4, Math.max(1, req.minSources - 6)) : Math.max(10, req.minSources);
+        const refs = Array.from({ length: refsTarget }, (_, i) => `- Reference ${i + 1}: Source ${i + 1}`).join("\n");
         const content = [`# ${topic}`, ``, `## Abstract`, `This paper evaluates the topic with balanced evidence, counterarguments, and uncertainty disclosures.`, ``, `## Main Body`, paragraphs, ``, `## References`, refs].join("\n");
         const out = await fileWrite(projectRoot, `docs/exports/${runId}.draft.md`, content);
         logSkill("file_write", { path: `docs/exports/${runId}.draft.md` }, out);
