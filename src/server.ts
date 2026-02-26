@@ -164,8 +164,41 @@ function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs
   return { outputs, summary };
 }
 
+const runIndexPath = path.join(process.cwd(), "docs", "runs_index.jsonl");
+
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
+}
+
+async function appendRunIndexMeta(run: RunRecord) {
+  const fsp = await import("node:fs/promises");
+  await fsp.mkdir(path.dirname(runIndexPath), { recursive: true });
+  const existing = await fsp.readFile(runIndexPath, "utf8").catch(() => "");
+  const exists = existing.split(/\n+/).some((ln) => {
+    if (!ln.trim()) return false;
+    try { return JSON.parse(ln).runId === run.id; } catch { return false; }
+  });
+  if (exists) return;
+  const meta = {
+    runId: run.id,
+    createdAt: run.createdAt,
+    gate: run.artifacts?.judge_v2?.must_fix_gate ?? null,
+    v2_score: run.artifacts?.judge_v2?.overall_score ?? null,
+    top_delta_dim: (() => {
+      const d = run.artifacts?.judge_delta;
+      if (!d || typeof d !== "object") return null;
+      const e = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1])[0];
+      return e?.[0] ?? null;
+    })(),
+    top_delta_val: (() => {
+      const d = run.artifacts?.judge_delta;
+      if (!d || typeof d !== "object") return null;
+      const e = Object.entries(d).map(([k,v]) => [k, Number(v)] as const).sort((a,b)=>b[1]-a[1])[0];
+      return e?.[1] ?? null;
+    })(),
+    gateReasons: Array.isArray(run.artifacts?.gateReasons) ? run.artifacts.gateReasons : [],
+  };
+  await fsp.appendFile(runIndexPath, JSON.stringify(meta) + "\n", "utf8");
 }
 
 async function continueRun(runId: string) {
@@ -389,10 +422,12 @@ async function continueRun(runId: string) {
     pushLog(run, JSON.stringify(run.qa));
     run.status = "done";
     pushLog(run, "run:done");
+    await appendRunIndexMeta(run);
   } catch (err) {
     run.status = "error";
     run.error = err instanceof Error ? err.stack || err.message : String(err);
     pushLog(run, "run:error");
+    await appendRunIndexMeta(run).catch(() => undefined);
   } finally {
     run.isProcessing = false;
   }
@@ -577,10 +612,32 @@ app.get("/runs/:runId", (req, res) => {
 });
 
 app.post("/quality/export-csv", async (req, res) => {
-  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  let rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const windowN = Number(req.body?.window ?? rows.length ?? 0);
-  if (!rows.length) return res.status(400).json({ error: "No rows to export" });
+  const filterType = String(req.body?.filter?.type ?? "");
+  const filterValue = String(req.body?.filter?.value ?? "");
+  let dataSource = "live runs";
+
   const fsp = await import("node:fs/promises");
+  if (!rows.length) {
+    const raw = await fsp.readFile(runIndexPath, "utf8").catch(() => "");
+    let parsed = raw.split(/\n+/).filter(Boolean).map((ln) => { try { return JSON.parse(ln); } catch { return null; } }).filter(Boolean) as any[];
+    parsed.sort((a,b) => String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    if (filterType === "gateReason" && filterValue) parsed = parsed.filter((r) => Array.isArray(r.gateReasons) && r.gateReasons.includes(filterValue));
+    if (filterType === "topDelta" && filterValue) parsed = parsed.filter((r) => String(r.top_delta_dim ?? "") === filterValue);
+    rows = parsed.slice(0, windowN || 50).map((r) => ({
+      id: r.runId,
+      createdAt: r.createdAt,
+      gate: r.gate,
+      v2_score: r.v2_score,
+      top_delta: { dimension: r.top_delta_dim, delta: r.top_delta_val },
+      gateReasons: r.gateReasons || [],
+    }));
+    dataSource = "persisted index";
+  }
+
+  if (!rows.length) return res.status(400).json({ error: "No rows to export. Run at least one paper job or check docs/runs_index.jsonl" });
+
   const qualityDir = path.join(process.cwd(), "docs/quality");
   await fsp.mkdir(qualityDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -591,7 +648,7 @@ app.post("/quality/export-csv", async (req, res) => {
     esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta?.dimension ?? ""), esc(r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|"))
   ].join(","));
   await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
-  return res.json({ ok: true, path: outPath, count: rows.length });
+  return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
 });
 
 app.post("/runs/:runId/open-output", async (req, res) => {
