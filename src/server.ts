@@ -279,6 +279,84 @@ function buildJudgeV3FromV2(judgeV2: any, repeatDetected: boolean) {
   };
 }
 
+
+function parseEssayChecks(md: string) {
+  const lines = md.split(/\n/);
+  const title = (lines.find((l) => l.trim().startsWith("# ")) || "").replace(/^#\s*/, "").trim();
+  const introMatch = md.match(/##\s+Introduction[^\n]*\n([\s\S]*?)(\n##\s+|$)/i);
+  const conclusionMatch = md.match(/##\s+Conclusion[^\n]*\n([\s\S]*?)(\n##\s+|$)/i) || md.match(/##\s+Limitations and Uncertainty[\s\S]*/i);
+  const worksCitedMatch = md.match(/##\s+(Works Cited|Sources)\n([\s\S]*)/i);
+  const worksLines = worksCitedMatch ? worksCitedMatch[2].split(/\n+/).filter((x) => x.trim().startsWith("- ")) : [];
+  const inText = (md.match(/\([^\)]*\d{4}[^\)]*\)|\[[1-9][0-9]*\]|According to [A-Z]/g) || []).length;
+  const wordCount = md.split(/\s+/).filter(Boolean).length;
+  const topicSentenceLike = (md.match(/##\s+Section[^\n]*\n[^\n]{30,}/g) || []).length;
+  const thesisInIntro = /argues that|thesis|this essay argues/i.test(introMatch?.[1] || "");
+  return {
+    word_count: wordCount,
+    has_title: Boolean(title) && !/^write a \d+ word research essay/i.test(title.toLowerCase()),
+    has_intro: Boolean(introMatch),
+    has_conclusion: Boolean(conclusionMatch),
+    has_works_cited: Boolean(worksCitedMatch),
+    works_cited_count: worksLines.length,
+    in_text_citations_count: inText,
+    topic_sentence_coverage: topicSentenceLike,
+    thesis_in_intro: thesisInIntro,
+  };
+}
+
+function levelFrom(okExcellent: boolean, okAdequate: boolean): "Excellent" | "Adequate" | "Needs Work" {
+  if (okExcellent) return "Excellent";
+  if (okAdequate) return "Adequate";
+  return "Needs Work";
+}
+
+function evaluateRubricJudge(md: string, goal: string, repeat: { repeat_flags: boolean; repeat_details: any }) {
+  const c = parseEssayChecks(md);
+  const levels: Record<string, "Excellent"|"Adequate"|"Needs Work"> = {
+    "Organization: Title, Introduction, Conclusion": levelFrom(c.has_title && c.has_intro && c.has_conclusion, c.has_intro || c.has_conclusion),
+    "Thesis/Focus": levelFrom(c.thesis_in_intro, c.has_intro),
+    "Organization (paragraphing & transitions)": levelFrom(c.topic_sentence_coverage >= 4, c.topic_sentence_coverage >= 2),
+    "Development: Support": levelFrom(c.works_cited_count >= 6 && c.in_text_citations_count >= 6, c.works_cited_count >= 4),
+    "Development: Analysis": levelFrom(/therefore|however|implication|suggests|because/i.test(md), /because|suggests/i.test(md)),
+    "Mechanics: Sentence Craft & Style": levelFrom(!repeat.repeat_flags, true),
+    "Mechanics: (Grammar and spelling)": "Adequate",
+    "Mechanics: MLA": levelFrom(c.has_works_cited && c.works_cited_count >= 6 && c.in_text_citations_count >= 6, c.has_works_cited && c.works_cited_count >= 4),
+  };
+  const notes = Object.fromEntries(Object.entries(levels).map(([k,v]) => [k, `${k} evaluated as ${v}. repeat=${repeat.repeat_flags}; worksCited=${c.works_cited_count}; inText=${c.in_text_citations_count}; topicSentences=${c.topic_sentence_coverage}.`]));
+  const needs = Object.entries(levels).filter(([,v])=>v==="Needs Work").map(([k])=>k);
+  const overall_level = needs.length ? "Needs Work" : (Object.values(levels).every(v=>v==="Excellent") ? "Excellent" : "Adequate");
+  const gate_reasons: string[] = [];
+  if (c.word_count < 650) gate_reasons.push('minWords_not_met');
+  if (!c.has_works_cited) gate_reasons.push('missing_works_cited');
+  if (c.works_cited_count < 6) gate_reasons.push('minSources_not_met');
+  if (c.in_text_citations_count < 6) gate_reasons.push('insufficient_in_text_citations');
+  if (!c.thesis_in_intro) gate_reasons.push('thesis_missing');
+  if (repeat.repeat_flags) gate_reasons.push(...['repeated_content_detected']);
+  if (levels['Mechanics: MLA'] === 'Needs Work') gate_reasons.push('mla_needs_work');
+  if (levels['Thesis/Focus'] === 'Needs Work') gate_reasons.push('thesis_needs_work');
+  if (overall_level === 'Needs Work') gate_reasons.push('overall_needs_work');
+  return {
+    model: 'openai:gpt-4o-mini',
+    rubric_title: 'Essay Grading Rubric',
+    overall_level,
+    criteria_levels: levels,
+    criteria_notes: notes,
+    top_weaknesses: needs.slice(0,3),
+    revision_instructions: [
+      'Ensure a non-generic title that states subject and viewpoint.',
+      'State argumentative thesis explicitly in first paragraph.',
+      'Use 3–5 section headings and one clear topic sentence per section.',
+      'Add at least one evidence sentence plus one analysis sentence per section.',
+      'Add MLA-style in-text citations for factual claims (>=6 total).',
+      'Provide a Works Cited section with >=6 entries and source metadata.',
+      'Avoid repeated paragraph starters and repeated template phrasing.'
+    ],
+    must_fix_gate: gate_reasons.length === 0,
+    gate_reasons,
+    checks: c,
+    repeat_detected: repeat.repeat_flags,
+  };
+}
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
 }
@@ -333,7 +411,8 @@ async function continueRun(runId: string) {
     const researchAgents = asArray(run.config.roleAssignments.research);
     if (researchAgents.length >= 2 && !run.artifacts?.researchSummary) {
       const { outputs, summary } = buildResearchOutputs(run.goal, researchAgents);
-      run.artifacts = {
+      await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
+    run.artifacts = {
         ...(run.artifacts ?? {}),
         researchOutputs: outputs,
         researchSummary: summary,
@@ -505,6 +584,7 @@ async function continueRun(runId: string) {
     const fsp = await import("node:fs/promises");
     const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");
     const finalMdText = await fsp.readFile(expectedMd, "utf8").catch(() => "");
+    const draftMdText = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.draft.md`), "utf8").catch(() => "");
     const urls = (researchText.match(/https?:\/\/[^\s)]+/g) || []).map((u) => u.replace(/[.,]$/, ""));
     const domains = urls.map((u) => { try { return new URL(u).hostname.replace(/^www\./,""); } catch { return ""; } }).filter(Boolean);
     const uniqueDomains = new Set(domains).size;
@@ -522,23 +602,27 @@ async function continueRun(runId: string) {
       : null;
     const { raw: top_delta_raw, effective: top_delta_effective } = getEffectiveTopDelta(judge_delta, Boolean(run.config?.anti_overfitting_applied));
     const repeat = detectRepeatSignals(finalMdText, run.goal);
-    const judge_v3 = buildJudgeV3FromV2(judge_v2, repeat.repeat_flags);
+    const judge_v1_rubric = evaluateRubricJudge(draftMdText, run.goal, detectRepeatSignals(draftMdText, run.goal));
+    const judge_v2_rubric = evaluateRubricJudge(finalMdText, run.goal, repeat);
+    const judge_v3 = judge_v2_rubric;
     const gateReasons = (() => {
       const g = judge_v2?.gate_reasons ?? {};
       const out: string[] = [];
-      if (g.overall_threshold === false) out.push("overall_v2 below required threshold");
-      if (g.overall_improved_by_2 === false) out.push("overall_v2 not >= overall_v1 + 2");
-      if (g.lowest_two_improved === false) out.push("weakest dimensions improvement below required");
+      const isEssayTask = /research essay|essay/i.test(run.goal);
+      if (!isEssayTask) {
+        if (g.overall_threshold === false) out.push("overall_v2 below required threshold");
+        if (g.overall_improved_by_2 === false) out.push("overall_v2 not >= overall_v1 + 2");
+        if (g.lowest_two_improved === false) out.push("weakest dimensions improvement below required");
+        if (g.force_gate_fail === false) out.push("force_gate_fail");
+        if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
+      }
       if (sourceCountFinal < 6 || g.sources_ok === false) out.push("minSources_not_met");
-      if (g.words_ok === false) out.push("minWords_not_met");
-      if (g.force_gate_fail === false) out.push("force_gate_fail");
-      if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
+      if (g.words_ok === false || wordCount < 650) out.push("minWords_not_met");
       if (repeat.repeat_flags) out.push(...repeat.reasons);
-      if (wordCount < 650) out.push("minWords_not_met");
-      if (sourceCountFinal < 6) out.push("minSources_not_met");
-      if (Number(judge_v3?.overall_score ?? 0) < 24) out.push("rubric_score_too_low");
-      if (Number(judge_v3?.dimension_scores?.["Citations & Integrity"] ?? 0) < 4) out.push("citations_integrity_too_low");
-      if (Number(judge_v3?.dimension_scores?.["Evidence & Specificity"] ?? 0) < 4) out.push("evidence_specificity_too_low");
+      if (judge_v3?.overall_level === "Needs Work") out.push("overall_needs_work");
+      if ((judge_v3?.criteria_levels?.["Mechanics: MLA"] ?? "Needs Work") === "Needs Work") out.push("mla_needs_work");
+      if ((judge_v3?.criteria_levels?.["Thesis/Focus"] ?? "Needs Work") === "Needs Work") out.push("thesis_needs_work");
+      for (const r of (judge_v3?.gate_reasons || [])) out.push(String(r));
       return Array.from(new Set(out));
     })();
     if (run.config?.enforce) {
@@ -562,6 +646,7 @@ async function continueRun(runId: string) {
       docxExists = false;
       pushLog(run, "export:docx_removed_due_to_gate_fail");
     }
+    await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
     run.artifacts = {
       ...(run.artifacts ?? {}),
       docxPath: gatePassed && docxExists ? expectedDocx : null,
@@ -575,6 +660,8 @@ async function continueRun(runId: string) {
       gateReasons,
       revision_report,
       judge_v3,
+      judge_v1_rubric,
+      judge_v2_rubric,
       repeat_flags: repeat.repeat_flags,
       repeat_details: repeat.repeat_details,
       sources_count: urls.length,

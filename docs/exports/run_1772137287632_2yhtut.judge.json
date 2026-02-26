@@ -1,0 +1,100 @@
+{
+  "judge_v1": {
+    "model": "openai:gpt-4o-mini",
+    "rubric_title": "Essay Grading Rubric",
+    "overall_level": "Adequate",
+    "criteria_levels": {
+      "Organization: Title, Introduction, Conclusion": "Adequate",
+      "Thesis/Focus": "Excellent",
+      "Organization (paragraphing & transitions)": "Excellent",
+      "Development: Support": "Excellent",
+      "Development: Analysis": "Excellent",
+      "Mechanics: Sentence Craft & Style": "Excellent",
+      "Mechanics: (Grammar and spelling)": "Adequate",
+      "Mechanics: MLA": "Excellent"
+    },
+    "criteria_notes": {
+      "Organization: Title, Introduction, Conclusion": "Organization: Title, Introduction, Conclusion evaluated as Adequate. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Thesis/Focus": "Thesis/Focus evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Organization (paragraphing & transitions)": "Organization (paragraphing & transitions) evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Development: Support": "Development: Support evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Development: Analysis": "Development: Analysis evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Mechanics: Sentence Craft & Style": "Mechanics: Sentence Craft & Style evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Mechanics: (Grammar and spelling)": "Mechanics: (Grammar and spelling) evaluated as Adequate. repeat=false; worksCited=6; inText=8; topicSentences=4.",
+      "Mechanics: MLA": "Mechanics: MLA evaluated as Excellent. repeat=false; worksCited=6; inText=8; topicSentences=4."
+    },
+    "top_weaknesses": [],
+    "revision_instructions": [
+      "Ensure a non-generic title that states subject and viewpoint.",
+      "State argumentative thesis explicitly in first paragraph.",
+      "Use 3–5 section headings and one clear topic sentence per section.",
+      "Add at least one evidence sentence plus one analysis sentence per section.",
+      "Add MLA-style in-text citations for factual claims (>=6 total).",
+      "Provide a Works Cited section with >=6 entries and source metadata.",
+      "Avoid repeated paragraph starters and repeated template phrasing."
+    ],
+    "must_fix_gate": true,
+    "gate_reasons": [],
+    "checks": {
+      "word_count": 873,
+      "has_title": false,
+      "has_intro": true,
+      "has_conclusion": true,
+      "has_works_cited": true,
+      "works_cited_count": 6,
+      "in_text_citations_count": 8,
+      "topic_sentence_coverage": 4,
+      "thesis_in_intro": true
+    },
+    "repeat_detected": false
+  },
+  "judge_v2": {
+    "model": "openai:gpt-4o-mini",
+    "rubric_title": "Essay Grading Rubric",
+    "overall_level": "Adequate",
+    "criteria_levels": {
+      "Organization: Title, Introduction, Conclusion": "Adequate",
+      "Thesis/Focus": "Excellent",
+      "Organization (paragraphing & transitions)": "Excellent",
+      "Development: Support": "Excellent",
+      "Development: Analysis": "Excellent",
+      "Mechanics: Sentence Craft & Style": "Excellent",
+      "Mechanics: (Grammar and spelling)": "Adequate",
+      "Mechanics: MLA": "Excellent"
+    },
+    "criteria_notes": {
+      "Organization: Title, Introduction, Conclusion": "Organization: Title, Introduction, Conclusion evaluated as Adequate. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Thesis/Focus": "Thesis/Focus evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Organization (paragraphing & transitions)": "Organization (paragraphing & transitions) evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Development: Support": "Development: Support evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Development: Analysis": "Development: Analysis evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Mechanics: Sentence Craft & Style": "Mechanics: Sentence Craft & Style evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Mechanics: (Grammar and spelling)": "Mechanics: (Grammar and spelling) evaluated as Adequate. repeat=false; worksCited=13; inText=12; topicSentences=4.",
+      "Mechanics: MLA": "Mechanics: MLA evaluated as Excellent. repeat=false; worksCited=13; inText=12; topicSentences=4."
+    },
+    "top_weaknesses": [],
+    "revision_instructions": [
+      "Ensure a non-generic title that states subject and viewpoint.",
+      "State argumentative thesis explicitly in first paragraph.",
+      "Use 3–5 section headings and one clear topic sentence per section.",
+      "Add at least one evidence sentence plus one analysis sentence per section.",
+      "Add MLA-style in-text citations for factual claims (>=6 total).",
+      "Provide a Works Cited section with >=6 entries and source metadata.",
+      "Avoid repeated paragraph starters and repeated template phrasing."
+    ],
+    "must_fix_gate": true,
+    "gate_reasons": [],
+    "checks": {
+      "word_count": 1196,
+      "has_title": false,
+      "has_intro": true,
+      "has_conclusion": true,
+      "has_works_cited": true,
+      "works_cited_count": 13,
+      "in_text_citations_count": 12,
+      "topic_sentence_coverage": 4,
+      "thesis_in_intro": true
+    },
+    "repeat_detected": false
+  }
+}

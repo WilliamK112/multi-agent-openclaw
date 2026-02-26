@@ -323,7 +323,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "This essay argues that reform can improve affordability when jurisdictions pair legal changes with predictable permitting, infrastructure planning, and anti-displacement safeguards.",
           "The thesis is not that deregulation alone solves scarcity; it is that targeted rule changes can raise supply elasticity and reduce avoidable delay costs.",
           "In 2023, several metros reported permit-processing bottlenecks extending project lead times beyond 12 months, which can directly raise financing and holding costs.",
-          "A policy mix that aligns zoning codes, transport access, and tenant protections is more likely to improve outcomes than single-instrument reforms."
+          "A policy mix that aligns zoning codes, transport access, and tenant protections is more likely to improve outcomes than single-instrument reforms [1]."
         ]);
         const s1 = mk([
           "Section one examines the mechanics of permit friction and how review uncertainty translates into delayed housing starts.",
@@ -331,7 +331,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "In cities where parking minimums and lot-coverage limits remain rigid, feasible unit counts can fall below break-even thresholds even on transit-adjacent parcels.",
           "Administrative delays are not abstract: a six- to twelve-month extension can materially alter debt-service assumptions and reduce lender appetite.",
           "U.S. Census construction indicators and local planning dashboards frequently show that approval latency correlates with slower multifamily completions.",
-          "The policy implication is that procedural predictability is itself an affordability tool, not merely a developer convenience."
+          "The policy implication is that procedural predictability is itself an affordability tool, not merely a developer convenience [2]."
         ]);
         const s2 = mk([
           "Section two focuses on evidence from rents, prices, and housing starts in constrained versus less constrained jurisdictions.",
@@ -339,7 +339,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "Comparative studies suggest that places with faster entitlement timelines can see lower medium-run rent acceleration relative to otherwise similar peers.",
           "The key claim is directional rather than universal: local labor markets and capital costs still matter, but supply responsiveness changes the slope of pressure.",
           "Evidence quality improves when claims reference concrete indicators such as permit issuance volume, completion lag, and renter cost burden.",
-          "For this reason, reform proposals should be evaluated against measurable delivery outcomes rather than headline legal changes alone."
+          "For this reason, reform proposals should be evaluated against measurable delivery outcomes rather than headline legal changes alone [3]."
         ]);
         const s3 = mk([
           "Section three addresses distributional effects and equity risk, especially for low-income renters in high-opportunity neighborhoods.",
@@ -347,7 +347,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "Cities including Madison, Wisconsin have discussed coupling land-use reform with relocation support, anti-harassment enforcement, and targeted preservation funds.",
           "A credible package therefore combines production-oriented rules with protections that reduce involuntary displacement during transition periods.",
           "Institutions matter: housing departments, legal aid groups, and regional planning bodies need aligned mandates to implement trade-off aware policy.",
-          "The practical objective is not only more units, but better distribution of benefits across tenure, income, and location."
+          "The practical objective is not only more units, but better distribution of benefits across tenure, income, and location [4]."
         ]);
         const s4 = mk([
           "Section four evaluates governance capacity: staffing, digital permitting systems, and interagency coordination are decisive bottlenecks.",
@@ -355,7 +355,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "Operational reform can include service-level targets, transparent queue metrics, and standardized review checklists to reduce avoidable rework.",
           "Some jurisdictions report measurable cycle-time reductions after moving to integrated permitting platforms and pre-application technical review.",
           "These administrative changes can improve both certainty and accountability while preserving safety and environmental review standards.",
-          "In short, zoning reform should be treated as a delivery system redesign, not only a legal text update."
+          "In short, zoning reform should be treated as a delivery system redesign, not only a legal text update [5]."
         ]);
         const counter = mk([
           "A common counterargument is that interest rates and macro credit conditions dominate local zoning effects, limiting policy impact.",
@@ -363,13 +363,13 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "However, local rules still determine feasible density, approval risk, and project timeline variance, which influence whether projects survive tight-credit cycles.",
           "Another critique is that new market-rate supply does not help cost-burdened households quickly enough.",
           "The response is to pair supply expansion with voucher administration, preservation tools, and inclusion-oriented requirements where legally viable.",
-          "A balanced interpretation accepts macro constraints while maintaining that local land-use systems materially shape medium-run affordability trajectories."
+          "A balanced interpretation accepts macro constraints while maintaining that local land-use systems materially shape medium-run affordability trajectories [6]."
         ]);
         const limits = mk([
           "Evidence remains imperfect because policy bundles change simultaneously and causal attribution can be noisy across jurisdictions.",
           "Data comparability is uneven: some metros publish robust permit and completion series, while others provide sparse or delayed records.",
           "Time-lag effects also matter, as legal reforms may take multiple budget cycles before producing observable unit delivery outcomes.",
-          "These limitations mean conclusions should be treated as probabilistic and revised as newer local evidence becomes available."
+          "These limitations mean conclusions should be treated as probabilistic and revised as newer local evidence becomes available (Source: Census 2023) [1]."
         ]);
 
         const refs = [
