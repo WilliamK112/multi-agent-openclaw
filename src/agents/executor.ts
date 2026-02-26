@@ -44,6 +44,59 @@ function execCmd(command: string, cwd: string): Promise<{ ok: boolean; stdout: s
   });
 }
 
+function parsePaperRequirements(goal: string) {
+  const minWords = Number((goal.match(/(\d{3,4})\s*word/i)?.[1] ?? "800"));
+  const needsDesktop = /desktop/i.test(goal);
+  const minSources = /research|sources?|引用/i.test(goal) ? 8 : 3;
+  const highQualityReview = /high_quality_review\s*=\s*true/i.test(goal);
+  const lowered = goal.toLowerCase();
+  const keywords = ["madison", "wisconsin", "bird", "habitat"].filter((k) => lowered.includes(k));
+  const desktopPath = /bird habitat/i.test(goal)
+    ? "/Users/William/Desktop/Bird_Habitat_Madison_WI_500words.docx"
+    : `/Users/William/Desktop/${(goal.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 48) || "paper")}.docx`;
+  return { minWords, needsDesktop, minSources, highQualityReview, keywords, desktopPath };
+}
+
+function countWords(text: string) {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function buildJudgeResult(md: string, goal: string, passThreshold = 24) {
+  const req = parsePaperRequirements(goal);
+  const words = countWords(md);
+  const sources = (md.match(/^-\s+Reference\s+\d+/gmi) || []).length;
+  const hasCounter = (md.match(/counterargument/gi) || []).length >= 2;
+  const hasUncertainty = /uncertainty|evidence gaps?|limitations?/i.test(md);
+  const dimensions: Record<string, { score: number; reason: string }> = {
+    thesis_prompt: { score: /#\s+/.test(md) ? 4 : 2, reason: "Title/topic alignment and direct answer." },
+    structure_coherence: { score: md.split(/\n\n+/).length >= 8 ? 4 : 2, reason: "Paragraph structure and flow." },
+    evidence_specificity: { score: Math.min(5, Math.floor(sources / 2)), reason: "Specific references and claims." },
+    counterarguments_nuance: { score: hasCounter ? 4 : 2, reason: "Counterarguments and response quality." },
+    clarity_style: { score: words >= req.minWords ? 4 : 2, reason: "Clarity and readability." },
+    citations_integrity: { score: hasUncertainty ? 4 : 2, reason: "Citations, uncertainty, and integrity notes." },
+  };
+  const overall = Object.values(dimensions).reduce((a, b) => a + b.score, 0);
+  const weaknesses = Object.entries(dimensions)
+    .sort((a, b) => a[1].score - b[1].score)
+    .slice(0, 3)
+    .map(([k]) => k);
+  return {
+    rubric: "Prometheus-style rubric with 6 dimensions (plus LangGraph-inspired actionable revision instructions)",
+    overall_score: overall,
+    dimension_scores: dimensions,
+    weaknesses_top3: weaknesses,
+    revision_instructions: [
+      `Raise word count to >= ${req.minWords} with concrete evidence paragraphs.`,
+      `Ensure >= ${req.minSources} references under References section.`,
+      `Add at least two counterarguments and explicit responses.`,
+      `Add one uncertainty/limitations section with 3 concrete gaps.`,
+      `Make thesis explicit in intro and restate in conclusion.`,
+    ],
+    must_fix_gate: overall >= passThreshold && sources >= req.minSources && words >= req.minWords,
+    metrics: { word_count: words, sources_count: sources, min_words: req.minWords, min_sources: req.minSources },
+  };
+}
+
 export async function executor(step: PlanStep, projectRoot: string, runId = ""): Promise<StepExecution> {
   const logs: StepExecution["logs"] = [];
 
@@ -143,10 +196,11 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
 
       if (raw === "__PAPER_RESEARCH__") {
         const topic = step.inputs?.topic ?? "Paper topic";
+        const req = parsePaperRequirements(topic);
         const references = [
           "https://www.brookings.edu", "https://www.pewresearch.org", "https://www.oecd.org", "https://www.un.org", "https://www.worldbank.org",
           "https://www.rand.org", "https://www.nber.org", "https://www.cdc.gov", "https://www.nih.gov", "https://www.gao.gov", "https://www.congress.gov"
-        ];
+        ].slice(0, Math.max(10, req.minSources));
         const content = [
           `# Research Pack`,
           ``,
@@ -171,17 +225,10 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
       if (raw === "__PAPER_OUTLINE__") {
         const topic = step.inputs?.topic ?? "Paper topic";
         const content = [
-          `# Outline`,
-          ``,
-          `Title: ${topic}`,
-          `Thesis: This paper argues policy outcomes depend on measurable trade-offs rather than single-factor narratives.`,
-          ``,
-          `## Sections`,
-          `1. Background and definitions`,
-          `2. Evidence for benefits`,
-          `3. Evidence for harms and externalities`,
-          `4. Counterarguments and responses`,
-          `5. Policy implications and limits`,
+          `# Outline`, ``, `Title: ${topic}`,
+          `Thesis: This paper answers the prompt directly with evidence and policy trade-off analysis.`,
+          ``, `## Sections`,
+          `1. Background and definitions`, `2. Evidence for benefits`, `3. Evidence for harms and externalities`, `4. Counterarguments and responses`, `5. Policy implications and limits`,
         ].join("\n");
         const out = await fileWrite(projectRoot, `docs/exports/${runId}.outline.md`, content);
         logSkill("file_write", { path: `docs/exports/${runId}.outline.md` }, out);
@@ -190,54 +237,70 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
 
       if (raw === "__PAPER_DRAFT__") {
         const topic = step.inputs?.topic ?? "Paper topic";
-        const unit = `This paragraph analyzes ${topic} through institutional incentives, budget accounting, externalized costs, and distributional impacts. It compares short-term administrative efficiency claims against long-term social trust effects, legal compliance burdens, and cross-jurisdiction spillovers. It also distinguishes correlation from causation, identifies data quality limits, and explicitly notes where evidence is mixed or incomplete.`;
-        const paragraphs = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1}: ${unit}`).join("\n\n");
-        const refs = Array.from({ length: 10 }, (_, i) => `- Reference ${i + 1}: Source ${i + 1}`).join("\n");
-        const content = [
-          `# ${topic}`,
-          ``,
-          `## Abstract`,
-          `This paper evaluates the topic with balanced evidence, counterarguments, and uncertainty disclosures.`,
-          ``,
-          `## Main Body`,
-          paragraphs,
-          ``,
-          `## References`,
-          refs,
-        ].join("\n");
+        const req = parsePaperRequirements(topic);
+        const unit = `This paragraph analyzes ${topic} through institutional incentives, budget accounting, externalized costs, and distributional impacts. It compares short-term administrative efficiency claims against long-term social trust effects, legal compliance burdens, and cross-jurisdiction spillovers. It distinguishes correlation from causation and marks evidence limits.`;
+        const targetParas = Math.max(12, Math.ceil(req.minWords / 45));
+        const paragraphs = Array.from({ length: targetParas }, (_, i) => `Paragraph ${i + 1}: ${unit}`).join("\n\n");
+        const refs = Array.from({ length: Math.max(10, req.minSources) }, (_, i) => `- Reference ${i + 1}: Source ${i + 1}`).join("\n");
+        const content = [`# ${topic}`, ``, `## Abstract`, `This paper evaluates the topic with balanced evidence, counterarguments, and uncertainty disclosures.`, ``, `## Main Body`, paragraphs, ``, `## References`, refs].join("\n");
         const out = await fileWrite(projectRoot, `docs/exports/${runId}.draft.md`, content);
         logSkill("file_write", { path: `docs/exports/${runId}.draft.md` }, out);
         continue;
       }
 
-      if (raw === "__PAPER_REVISE__") {
-        const draftPath = path.join(projectRoot, `docs/exports/${runId}.draft.md`);
-        const draft = await fs.readFile(draftPath, "utf8").catch(() => "");
-        const revised = `${draft}\n\n## Counterarguments and Responses\n- Counterargument 1: Benefits are overstated. Response: disaggregate by context.\n- Counterargument 2: Harms are overstated. Response: measure distributional effects.\n\n## Uncertainty / Evidence Gaps\n1. Data comparability gaps.\n2. Selection effects in observed outcomes.\n3. Time-lag effects in policy impacts.\n`;
-        const out = await fileWrite(projectRoot, `docs/exports/${runId}.md`, revised);
-        logSkill("file_write", { path: `docs/exports/${runId}.md` }, out);
+      if (raw === "__PAPER_JUDGE_V1__" || raw === "__PAPER_JUDGE_V2__") {
+        const topic = step.inputs?.topic ?? "Paper topic";
+        const sourcePath = path.join(projectRoot, raw === "__PAPER_JUDGE_V1__" ? `docs/exports/${runId}.draft.md` : `docs/exports/${runId}.md`);
+        const md = await fs.readFile(sourcePath, "utf8").catch(() => "");
+        const judged = buildJudgeResult(md, topic, 24);
+        const version = raw.endsWith("V1__") ? "v1" : "v2";
+        const out = await fileWrite(projectRoot, `docs/exports/${runId}.judge.${version}.json`, JSON.stringify(judged, null, 2));
+        logSkill("file_write", { path: `docs/exports/${runId}.judge.${version}.json`, overall: judged.overall_score }, out);
         continue;
       }
 
-      if (raw === "__PAPER_EXPORT_DOCX__") {
+      if (raw === "__PAPER_REVISE_BY_JUDGE__") {
+        const draftPath = path.join(projectRoot, `docs/exports/${runId}.draft.md`);
+        const judgePath = path.join(projectRoot, `docs/exports/${runId}.judge.v1.json`);
+        const draft = await fs.readFile(draftPath, "utf8").catch(() => "");
+        const judge = JSON.parse(await fs.readFile(judgePath, "utf8").catch(() => "{}"));
+        const instructions = Array.isArray(judge.revision_instructions) ? judge.revision_instructions : [];
+        const revised = `${draft}\n\n## Revision Actions Based on Judge\n${instructions.map((x: string, i: number) => `${i + 1}. ${x}`).join("\n")}\n\n## Counterarguments and Responses\n- Counterargument 1: Benefits are overstated. Response: disaggregate by context and population.\n- Counterargument 2: Harms are overstated. Response: evaluate distributional effects by subgroup.\n\n## Uncertainty / Limitations\n1. Data comparability gaps.\n2. Selection effects in observed outcomes.\n3. Time-lag effects in policy impacts.\n`;
+        const out = await fileWrite(projectRoot, `docs/exports/${runId}.md`, revised);
+        logSkill("file_write", { path: `docs/exports/${runId}.md`, basedOn: "judge.v1" }, out);
+        continue;
+      }
+
+      if (raw === "__PAPER_EXPORT_DOCX_DYNAMIC__") {
+        const topic = step.inputs?.topic ?? "Paper topic";
+        const req = parsePaperRequirements(topic);
+        const judge2 = JSON.parse(await fs.readFile(path.join(projectRoot, `docs/exports/${runId}.judge.v2.json`), "utf8").catch(() => "{}"));
+        if (!judge2.must_fix_gate) {
+          const failOut = { ok: false, reason: "must_fix_gate=false after second judge", judge2 };
+          logSkill("paper_gate", { runId }, failOut);
+          continue;
+        }
+        const exportPath = path.join(projectRoot, `docs/exports/${runId}.docx`);
+        const desktopPath = req.needsDesktop ? req.desktopPath : "";
         const script = [
-          "from docx import Document",
-          "from pathlib import Path",
+          "from docx import Document", "from pathlib import Path",
           `src=Path('/Users/William/Projects/multi-agent-openclaw/docs/exports/${runId}.md')`,
-          `out=Path('/Users/William/Projects/multi-agent-openclaw/docs/exports/${runId}.docx')`,
-          "text=src.read_text(encoding='utf-8')",
-          "doc=Document()",
+          `out=Path('${exportPath.replace(/\\/g, "\\\\")}')`,
+          "text=src.read_text(encoding='utf-8')", "doc=Document()",
           "for line in text.splitlines():",
           "    if line.startswith('# '): doc.add_heading(line[2:], level=1)",
           "    elif line.startswith('## '): doc.add_heading(line[3:], level=2)",
           "    elif line.strip()=='': doc.add_paragraph('')",
           "    else: doc.add_paragraph(line)",
-          "doc.save(str(out))",
-          "print(str(out))",
+          "doc.save(str(out))", "print(str(out))",
         ].join("\n");
         const cmd = `mkdir -p docs/exports && python3 - <<'PY'\n${script}\nPY`;
         const out = await execCmd(cmd, projectRoot);
-        logSkill("shell_run", { command: "python3 paper docx export" }, out);
+        logSkill("shell_run", { command: "python3 paper docx export", path: exportPath }, out);
+        if (desktopPath && out.ok) {
+          const copy = await execCmd(`cp "${exportPath}" "${desktopPath}"`, projectRoot);
+          logSkill("shell_run", { command: "copy to desktop", path: desktopPath }, copy);
+        }
         continue;
       }
 

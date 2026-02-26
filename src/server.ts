@@ -2,6 +2,7 @@ import "dotenv/config";
 import path from "node:path";
 import express from "express";
 import cors from "cors";
+import { exec as cpExec } from "node:child_process";
 import { getModel, getProvider } from "./config";
 import { planner, type Plan } from "./agents/planner";
 import { executor } from "./agents/executor";
@@ -19,7 +20,7 @@ type RoleAssignments = {
 
 type WorkflowStage = {
   id: string;
-  type: "research" | "synth" | "plan" | "execute" | "qa" | "review";
+  type: "research" | "synth" | "plan" | "execute" | "qa" | "review" | "judge";
   agents: string[];
   mergePolicy: "none" | "summary" | "judge" | "vote";
   notes?: string;
@@ -112,7 +113,7 @@ function normalizeRoleAssignments(input?: RoleAssignments): RoleAssignments | un
 
 function normalizeWorkflowStages(input: any): WorkflowStage[] | undefined {
   if (!Array.isArray(input)) return undefined;
-  const allowedTypes = new Set(["research", "synth", "plan", "execute", "qa", "review"]);
+  const allowedTypes = new Set(["research", "synth", "plan", "execute", "qa", "review", "judge"]);
   const allowedMerge = new Set(["none", "summary", "judge", "vote"]);
   const out: WorkflowStage[] = [];
   for (let i = 0; i < input.length; i++) {
@@ -526,6 +527,18 @@ app.get("/runs/:runId", (req, res) => {
     return res.status(404).json({ error: "Run not found" });
   }
   return res.json(run);
+});
+
+app.post("/runs/:runId/open-output", (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const target = run.artifacts?.docxPath;
+  if (!target) return res.status(400).json({ error: "No docx output path for this run" });
+
+  cpExec(`open "${target.replace(/"/g, '\\"')}"`, (err) => {
+    if (err) return res.status(500).json({ error: `Failed to open output: ${err.message}` });
+    return res.json({ ok: true, path: target });
+  });
 });
 
 const PORT = Number(process.env.PORT ?? 8787);

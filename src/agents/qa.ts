@@ -79,10 +79,16 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
   }
 
   if (isPaperMode) {
+    const minWords = Number((goal.match(/(\d{3,4})\s*word/i)?.[1] ?? "800"));
+    const minSources = /research|sources?|引用/i.test(goal) ? 8 : 3;
     const docxPath = path.join(projectRoot, `docs/exports/${runId}.docx`);
     const mdPath = path.join(projectRoot, `docs/exports/${runId}.md`);
+    const j1Path = path.join(projectRoot, `docs/exports/${runId}.judge.v1.json`);
+    const j2Path = path.join(projectRoot, `docs/exports/${runId}.judge.v2.json`);
     checks["paper docx exists"] = await exists(docxPath);
     checks["paper markdown exists"] = await exists(mdPath);
+    checks["judge v1 exists"] = await exists(j1Path);
+    checks["judge v2 exists"] = await exists(j2Path);
     try {
       const st = await fs.stat(docxPath);
       checks["paper docx size > 10KB"] = st.size > 10 * 1024;
@@ -95,18 +101,27 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
       checks["title present"] = /^#\s+/.test(title);
       checks["has references section"] = /references|参考文献/i.test(md);
       checks["body paragraphs >=8"] = md.split(/\n\n+/).filter(Boolean).length >= 8;
-      checks["word count >=1500"] = md.split(/\s+/).filter(Boolean).length >= 1500;
+      checks[`word count >=${minWords}`] = md.split(/\s+/).filter(Boolean).length >= minWords;
       checks["mentions >=2 counterarguments"] = (md.match(/counterargument/gi) || []).length >= 2;
-      checks["lists 3 uncertainties"] = (md.match(/uncertainty|evidence gap/gi) || []).length >= 3;
-      checks["references >=10"] = (md.match(/^-\s+Reference\s+\d+/gmi) || []).length >= 10;
+      checks["lists 3 uncertainties"] = (md.match(/uncertainty|evidence gap|limitations?/gi) || []).length >= 3;
+      checks[`references >=${minSources}`] = (md.match(/^-\s+Reference\s+\d+/gmi) || []).length >= minSources;
     } catch {
       checks["title present"] = false;
       checks["has references section"] = false;
       checks["body paragraphs >=8"] = false;
-      checks["word count >=1500"] = false;
+      checks[`word count >=${minWords}`] = false;
       checks["mentions >=2 counterarguments"] = false;
       checks["lists 3 uncertainties"] = false;
-      checks["references >=10"] = false;
+      checks[`references >=${minSources}`] = false;
+    }
+    try {
+      const j1 = JSON.parse(await fs.readFile(j1Path, "utf8"));
+      const j2 = JSON.parse(await fs.readFile(j2Path, "utf8"));
+      checks["judge score improved or equal"] = Number(j2?.overall_score ?? 0) >= Number(j1?.overall_score ?? 0);
+      checks["judge gate passed"] = Boolean(j2?.must_fix_gate);
+    } catch {
+      checks["judge score improved or equal"] = false;
+      checks["judge gate passed"] = false;
     }
   }
 

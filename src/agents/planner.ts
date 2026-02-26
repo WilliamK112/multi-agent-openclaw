@@ -41,12 +41,14 @@ function fallbackPlan(goal: string): Plan {
     return {
       goal,
       steps: [
-        { id: "stage-1-research", objective: "Collect evidence and sources (>=10)", tools: ["shell_run"], success_criteria: "sources and research notes generated", inputs: { command: "__PAPER_RESEARCH__", topic: goal } },
+        { id: "stage-1-research", objective: "Collect evidence and sources", tools: ["shell_run"], success_criteria: "sources and research notes generated", inputs: { command: "__PAPER_RESEARCH__", topic: goal } },
         { id: "stage-2-outline", objective: "Generate thesis-driven outline", tools: ["shell_run"], success_criteria: "outline generated", inputs: { command: "__PAPER_OUTLINE__", topic: goal } },
-        { id: "stage-3-draft", objective: "Write first draft >=1500 words", tools: ["shell_run"], success_criteria: "draft markdown generated", inputs: { command: "__PAPER_DRAFT__", topic: goal } },
-        { id: "stage-4-revise", objective: "Revise logic, counterarguments, uncertainty", tools: ["shell_run"], success_criteria: "revised markdown generated", inputs: { command: "__PAPER_REVISE__", topic: goal } },
-        { id: "stage-5-export", objective: "Export .docx to docs/exports/<runId>.docx", tools: ["shell_run"], success_criteria: "docx exported", inputs: { command: "__PAPER_EXPORT_DOCX__" } },
-        { id: "stage-6-qa", objective: "Read final markdown evidence", tools: ["file_read"], success_criteria: "export markdown readable", inputs: { path: "docs/exports/__RUN_ID__.md" } },
+        { id: "stage-3-draft", objective: "Write first draft", tools: ["shell_run"], success_criteria: "draft markdown generated", inputs: { command: "__PAPER_DRAFT__", topic: goal } },
+        { id: "stage-4-judge-v1", objective: "Judge draft with rubric JSON", tools: ["shell_run"], success_criteria: "judge v1 json generated", inputs: { command: "__PAPER_JUDGE_V1__", topic: goal } },
+        { id: "stage-5-revise", objective: "Revise by judge weaknesses", tools: ["shell_run"], success_criteria: "revised markdown generated", inputs: { command: "__PAPER_REVISE_BY_JUDGE__", topic: goal } },
+        { id: "stage-6-judge-v2", objective: "Judge revised draft again", tools: ["shell_run"], success_criteria: "judge v2 json generated", inputs: { command: "__PAPER_JUDGE_V2__", topic: goal } },
+        { id: "stage-7-export", objective: "Export docx when gate passes", tools: ["shell_run"], success_criteria: "docx exported", inputs: { command: "__PAPER_EXPORT_DOCX_DYNAMIC__", topic: goal } },
+        { id: "stage-8-qa", objective: "Read final markdown evidence", tools: ["file_read"], success_criteria: "export markdown readable", inputs: { path: "docs/exports/__RUN_ID__.md" } },
       ],
     };
   }
