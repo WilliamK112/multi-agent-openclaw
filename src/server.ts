@@ -49,6 +49,8 @@ type RunRecord = {
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
     researchSummary?: string;
+    docxPath?: string;
+    exportMdPath?: string;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -158,8 +160,8 @@ function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs
   return { outputs, summary };
 }
 
-function needsApprovalForStep(step: Plan["steps"][number]) {
-  return step.tools.includes("openclaw_act");
+function needsApprovalForStep(_step: Plan["steps"][number]) {
+  return false;
 }
 
 async function continueRun(runId: string) {
@@ -336,6 +338,14 @@ async function continueRun(runId: string) {
       run.nextStepIndex = i + 1;
     }
 
+    const expectedDocx = path.join(process.cwd(), `docs/exports/${run.id}.docx`);
+    const expectedMd = path.join(process.cwd(), `docs/exports/${run.id}.md`);
+    run.artifacts = {
+      ...(run.artifacts ?? {}),
+      docxPath: expectedDocx,
+      exportMdPath: expectedMd,
+    };
+    pushLog(run, `export:docx_path=${expectedDocx}`);
     run.qa = await qa(process.cwd(), run.goal, run.id, run.config, run.artifacts);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
@@ -354,6 +364,10 @@ app.post("/run", (req, res) => {
   const goal = String(req.body?.goal ?? "").trim();
   if (!goal) {
     return res.status(400).json({ error: "Missing goal in body" });
+  }
+  const disallowed = /fix\s+bug|feature|ui automation|openclaw_act|cursor ui|click button|refactor code|add endpoint/i;
+  if (disallowed.test(goal)) {
+    return res.status(400).json({ error: "Paper Mode Only: non-writing engineering/UI goals are disabled." });
   }
 
   const roleAssignmentsRaw = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
@@ -500,6 +514,7 @@ app.get("/runs", (req, res) => {
       roleSummary: {
         count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
       },
+      docxPath: r.artifacts?.docxPath ?? null,
     }));
 
   return res.json(list);

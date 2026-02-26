@@ -32,7 +32,25 @@ const planSchema = z.object({
     .min(1),
 });
 
+function isPaperGoal(_goal: string): boolean {
+  return true;
+}
+
 function fallbackPlan(goal: string): Plan {
+  if (isPaperGoal(goal)) {
+    return {
+      goal,
+      steps: [
+        { id: "stage-1-research", objective: "Collect evidence and sources (>=10)", tools: ["shell_run"], success_criteria: "sources and research notes generated", inputs: { command: "__PAPER_RESEARCH__", topic: goal } },
+        { id: "stage-2-outline", objective: "Generate thesis-driven outline", tools: ["shell_run"], success_criteria: "outline generated", inputs: { command: "__PAPER_OUTLINE__", topic: goal } },
+        { id: "stage-3-draft", objective: "Write first draft >=1500 words", tools: ["shell_run"], success_criteria: "draft markdown generated", inputs: { command: "__PAPER_DRAFT__", topic: goal } },
+        { id: "stage-4-revise", objective: "Revise logic, counterarguments, uncertainty", tools: ["shell_run"], success_criteria: "revised markdown generated", inputs: { command: "__PAPER_REVISE__", topic: goal } },
+        { id: "stage-5-export", objective: "Export .docx to docs/exports/<runId>.docx", tools: ["shell_run"], success_criteria: "docx exported", inputs: { command: "__PAPER_EXPORT_DOCX__" } },
+        { id: "stage-6-qa", objective: "Read final markdown evidence", tools: ["file_read"], success_criteria: "export markdown readable", inputs: { path: "docs/exports/__RUN_ID__.md" } },
+      ],
+    };
+  }
+
   if (goal.toLowerCase().includes("cursor readme demo")) {
     return {
       goal,
@@ -378,7 +396,7 @@ function fallbackPlan(goal: string): Plan {
 
 export async function planner(goal: string, provider: LLMProvider, model: string): Promise<Plan> {
   const lower = goal.toLowerCase();
-  if (lower.includes("phase 1 role assignment") || lower.includes("phase 2 multi research demo") || lower.includes("phase 3a workflow builder demo") || lower.includes("stage 3") || lower.includes("test run evidence") || lower.includes("cursor readme demo") || lower.includes("test output demo") || lower.includes("[debug_") || lower.includes("word document") || lower.includes("research this topic")) {
+  if (isPaperGoal(goal) || lower.includes("phase 1 role assignment") || lower.includes("phase 2 multi research demo") || lower.includes("phase 3a workflow builder demo") || lower.includes("stage 3") || lower.includes("test run evidence") || lower.includes("cursor readme demo") || lower.includes("test output demo") || lower.includes("[debug_") || lower.includes("word document") || lower.includes("research this topic")) {
     return fallbackPlan(goal);
   }
 

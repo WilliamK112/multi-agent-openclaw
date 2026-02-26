@@ -159,8 +159,9 @@
       </div>
     </div>
     <div class="form-row">
-      <input type="text" id="goal" placeholder="Enter your goal (e.g. Build a multi-agent system skeleton)" />
+      <input type="text" id="goal" placeholder="Paper Mode Only: enter a research paper/report topic" />
       <button class="btn-primary" id="submit">Run</button>
+      <span style="margin-left:8px;color:#fbbf24;font-size:.82rem;">Paper Mode Only</span>
     </div>
 
     <div class="panel" style="margin-bottom:12px;">
@@ -254,15 +255,20 @@
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
     let mode = 'roles';
     let workflowStages = [
-      { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini', 'tavily-search:tool', 'deepseek:local'], mergePolicy: 'none', notes: '', roleId: 'researcher_1' },
-      { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: '', roleId: 'synthesizer' },
-      { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: '', roleId: 'qa_judge' },
+      { id: 's1', type: 'research', agents: ['tavily-search:tool', 'deepseek:local', 'chatgpt-api:gpt-4o-mini'], mergePolicy: 'none', notes: 'sources>=10', roleId: 'researcher_1' },
+      { id: 's2', type: 'plan', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'outline with thesis+3-5 sections', roleId: 'outliner' },
+      { id: 's3', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'draft >=1500 words', roleId: 'drafter' },
+      { id: 's4', type: 'review', agents: ['deepseek:local'], mergePolicy: 'summary', notes: 'revise + counterarguments + uncertainty', roleId: 'reviser' },
+      { id: 's5', type: 'execute', agents: ['none'], mergePolicy: 'none', notes: 'export docx docs/exports/<runId>.docx', roleId: 'exporter' },
+      { id: 's6', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'docx+content QA', roleId: 'qa_judge' },
     ];
     let workflowRoles = [
-      { id: 'researcher_1', name: 'Researcher 1', prompt: 'Role: Researcher\nGoal: collect evidence\nInput: user goal\nOutput: bullets + citations\nConstraints: no secrets\nSelf-check: source diversity\nCost: medium\nStop if data missing' },
-      { id: 'synthesizer', name: 'Synthesizer', prompt: 'Role: Synthesizer\nGoal: merge outputs\nInput: research outputs\nOutput: concise summary\nConstraints: preserve uncertainty\nSelf-check: no contradictions\nCost: low\nFormat: structured sections' },
-      { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nGoal: validate deliverable\nInput: draft output\nOutput: pass/fail + checks\nConstraints: explicit criteria\nSelf-check: mention gaps\nCost: low\nFormat: checklist json' },
-      { id: 'executor', name: 'Executor', prompt: 'Role: Executor\nGoal: run tools exactly\nInput: plan steps\nOutput: logs + artifacts\nConstraints: no secret exposure\nSelf-check: verify outputs exist\nCost: low\nFormat: step records' },
+      { id: 'researcher_1', name: 'Researcher', prompt: 'Role: Researcher\nBoundary: collect >=10 diverse sources\nInput: paper topic\nOutput: sources + notes\nFormat: bullet list with URLs\nRisk check: identify weak evidence\nCost cap: medium\nNo private data' },
+      { id: 'outliner', name: 'Outliner', prompt: 'Role: Outliner\nBoundary: build thesis and structure\nInput: research notes\nOutput: outline (3-5 sections)\nFormat: numbered sections\nRisk check: evidence needs per section\nCost cap: low\nNo unsupported claims' },
+      { id: 'drafter', name: 'Drafter', prompt: 'Role: Drafter\nBoundary: write full draft >=1500 words\nInput: approved outline\nOutput: draft markdown\nFormat: title/abstract/body/references\nRisk check: mark uncertainty\nCost cap: medium\nNo fabricated citations' },
+      { id: 'reviser', name: 'Reviser', prompt: 'Role: Reviser\nBoundary: improve logic and balance\nInput: draft\nOutput: revised markdown\nFormat: clear sections\nRisk check: add 2+ counterarguments\nCost cap: low\nList 3 uncertainty gaps' },
+      { id: 'exporter', name: 'Exporter', prompt: 'Role: Exporter\nBoundary: export final document\nInput: revised markdown\nOutput: docx + md paths\nFormat: absolute/repo path\nRisk check: verify filesize\nCost cap: low\nStop on write errors' },
+      { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: validate acceptance checks\nInput: docx+md outputs\nOutput: pass/fail matrix\nFormat: checklist\nRisk check: strict on docx existence\nCost cap: low\nNo ambiguous verdict' }
     ];
     let roleAssignmentsByRole = Object.fromEntries(workflowRoles.map(r => [r.id, 'none']));
     let recommendedBundle = null;

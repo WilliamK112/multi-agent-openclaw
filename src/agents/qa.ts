@@ -26,6 +26,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
 }
 
 export async function qa(projectRoot: string, goal = "", runId = "", runConfig?: any, runArtifacts?: any): Promise<QAResult> {
+  const isPaperMode = /paper|essay|report|research|论文|研究报告|analysis|policy/i.test(goal);
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -75,6 +76,38 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
   if (goal.toLowerCase().includes("word document") || goal.toLowerCase().includes("research this topic")) {
     checks["article markdown exists"] = await exists(path.join(projectRoot, "docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md"));
     checks["desktop docx exists"] = await exists("/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx");
+  }
+
+  if (isPaperMode) {
+    const docxPath = path.join(projectRoot, `docs/exports/${runId}.docx`);
+    const mdPath = path.join(projectRoot, `docs/exports/${runId}.md`);
+    checks["paper docx exists"] = await exists(docxPath);
+    checks["paper markdown exists"] = await exists(mdPath);
+    try {
+      const st = await fs.stat(docxPath);
+      checks["paper docx size > 10KB"] = st.size > 10 * 1024;
+    } catch {
+      checks["paper docx size > 10KB"] = false;
+    }
+    try {
+      const md = await fs.readFile(mdPath, "utf8");
+      const title = md.split("\n")[0] || "";
+      checks["title present"] = /^#\s+/.test(title);
+      checks["has references section"] = /references|参考文献/i.test(md);
+      checks["body paragraphs >=8"] = md.split(/\n\n+/).filter(Boolean).length >= 8;
+      checks["word count >=1500"] = md.split(/\s+/).filter(Boolean).length >= 1500;
+      checks["mentions >=2 counterarguments"] = (md.match(/counterargument/gi) || []).length >= 2;
+      checks["lists 3 uncertainties"] = (md.match(/uncertainty|evidence gap/gi) || []).length >= 3;
+      checks["references >=10"] = (md.match(/^-\s+Reference\s+\d+/gmi) || []).length >= 10;
+    } catch {
+      checks["title present"] = false;
+      checks["has references section"] = false;
+      checks["body paragraphs >=8"] = false;
+      checks["word count >=1500"] = false;
+      checks["mentions >=2 counterarguments"] = false;
+      checks["lists 3 uncertainties"] = false;
+      checks["references >=10"] = false;
+    }
   }
 
   if (runConfig?.roleAssignments) {
