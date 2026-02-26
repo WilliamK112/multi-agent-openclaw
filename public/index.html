@@ -268,6 +268,8 @@
     let trendWindow = 50;
     let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
     let trendState = { filteredRuns: [], topReason: null, overfitWarning: null };
+    let runEnforce = null;
+    let antiOverfittingApplied = false;
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
@@ -363,6 +365,8 @@
       if (runConfigPayload?.workflowStages) payload.workflowStages = runConfigPayload.workflowStages;
       if (runConfigPayload?.roles) payload.roles = runConfigPayload.roles;
       if (runConfigPayload?.roleAssignmentsByRole) payload.roleAssignmentsByRole = runConfigPayload.roleAssignmentsByRole;
+      if (runConfigPayload?.enforce) payload.enforce = runConfigPayload.enforce;
+      if (runConfigPayload?.anti_overfitting_applied) payload.anti_overfitting_applied = true;
       const res = await fetch(`${API}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -806,8 +810,10 @@
 
       const dimCounts = {};
       runsWindow.forEach(r => { const d = r.top_delta?.dimension; if (d) dimCounts[d] = (dimCounts[d]||0)+1; });
+      const domainVals = runsWindow.map(r => Number(r.unique_domains)).filter(v => Number.isFinite(v) && v > 0);
+      const avgDomains = domainVals.length ? (domainVals.reduce((a,b)=>a+b,0)/domainVals.length) : null;
       const topDims = Object.entries(dimCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
-      trendDimensionsEl.innerHTML = `Improvement Focus Top3: ${topDims.length ? topDims.map(([k,v]) => `<button class="clear-btn" data-filter-dim="${escapeHtml(k)}">${escapeHtml(k)}: ${v}</button>`).join(' ') : '—'}`;
+      trendDimensionsEl.innerHTML = `Improvement Focus Top3: ${topDims.length ? topDims.map(([k,v]) => `<button class="clear-btn" data-filter-dim="${escapeHtml(k)}">${escapeHtml(k)}: ${v}</button>`).join(' ') : '—'} · avg_unique_domains=${avgDomains==null?'—':avgDomains.toFixed(2)}`;
 
       const recent10Scored = scoredRuns.slice(0,10);
       const focus = {};
@@ -828,10 +834,12 @@
 
       trendSparklineEl.innerHTML = `Score sparkline (M=${scoredCount}): ${spark(scores.slice(0,50))}<br>` +
         `Gate sparkline (N=${totalRuns}): ${gateSpark(runsWindow.map(r=>r.gate).slice(0,50))}<br>` +
-        `Overfitting check (last 10 scored runs): ${overfitText}`;
+        `Overfitting check (last 10 scored runs): ${overfitText} ${overfitWarn?'<button class="clear-btn" id="apply-anti-inline">Apply Anti-Overfitting Preset</button>':''}`;
 
       trendReasonsEl.querySelectorAll('[data-filter-reason]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'gateReason',value:el.dataset.filterReason}; renderRuns(allRunsCache); }));
       trendDimensionsEl.querySelectorAll('[data-filter-dim]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'topDelta',value:el.dataset.filterDim}; renderRuns(allRunsCache); }));
+      const applyInline = document.getElementById('apply-anti-inline');
+      if (applyInline) applyInline.addEventListener('click', () => antiOverfitBtn.click());
     }
 
     function renderRuns(runs) {
@@ -854,7 +862,7 @@
             </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${r.top_delta ? `${escapeHtml(String(r.top_delta.dimension))}:${escapeHtml(String(r.top_delta.delta))}` : '—'} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${r.top_delta ? `${escapeHtml(String(r.top_delta.dimension))}:${escapeHtml(String(r.top_delta.delta))}` : '—'} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -1006,11 +1014,14 @@
               workflowStages: workflowPayload(),
               roles: workflowRoles,
               roleAssignmentsByRole,
+              enforce: runEnforce || undefined,
+              anti_overfitting_applied: antiOverfittingApplied,
             }
-          : { roleAssignments: payloadRoles };
+          : { roleAssignments: payloadRoles, enforce: runEnforce || undefined, anti_overfitting_applied: antiOverfittingApplied };
         const { runId } = await createRun(goal, payload);
         goalInput.value = '';
         selectedRunId = runId;
+        antiOverfittingApplied = false;
         startPolling();
         await refresh();
       } catch (e) {
@@ -1149,6 +1160,7 @@
         enforce: {
           evidence_or_citations_delta_min: 2,
           source_diversity_min_domains: 3,
+          max_duplicate_ratio: 0.2,
         },
         revisionPolicy: [
           'Require v2 evidence_specificity or citations_integrity >= +2',
@@ -1156,7 +1168,9 @@
           'Block export when only one dimension repeatedly dominates top_delta'
         ]
       };
-      actionHintEl.textContent = `Anti-overfitting preset generated (warning on ${trendState.overfitWarning}).`;
+      runEnforce = preset.enforce;
+      antiOverfittingApplied = true;
+      actionHintEl.textContent = `Anti-overfitting preset generated and applied to next run config (warning on ${trendState.overfitWarning}).`;
       actionPresetPreviewEl.textContent = JSON.stringify(preset, null, 2);
     });
 
@@ -1165,11 +1179,14 @@
         const res = await fetch(`${API}/quality/export-csv`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ window: trendWindow, rows: trendState.filteredRuns || [] }),
+          body: JSON.stringify({ window: trendWindow, rows: trendState.filteredRuns || [], filter: trendFilter }),
         });
         const out = await res.json();
         if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
-        actionHintEl.textContent = `Exported quality CSV: ${out.path}`;
+        const dsText = out.dataSource === 'persisted index'
+          ? 'Live runs empty (server restart). Exported from persisted index.'
+          : 'Data source: live runs';
+        actionHintEl.textContent = `Exported quality CSV: ${out.path} · ${dsText}`;
         actionPresetPreviewEl.textContent = JSON.stringify(out, null, 2);
       } catch (e) {
         actionHintEl.textContent = `CSV export failed: ${e.message}`;

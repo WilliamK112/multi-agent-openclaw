@@ -32,6 +32,12 @@ type RoleDef = {
   prompt: string;
 };
 
+type EnforceConfig = {
+  evidence_or_citations_delta_min?: number;
+  source_diversity_min_domains?: number;
+  max_duplicate_ratio?: number;
+};
+
 type RunRecord = {
   id: string;
   goal: string;
@@ -46,15 +52,20 @@ type RunRecord = {
     workflowStages?: WorkflowStage[];
     roles?: RoleDef[];
     roleAssignmentsByRole?: Record<string, string>;
+    enforce?: EnforceConfig;
+    anti_overfitting_applied?: boolean;
   };
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
     researchSummary?: string;
-    docxPath?: string;
+    docxPath?: string | null;
     exportMdPath?: string;
     judge_v1?: any;
     judge_v2?: any;
     revision_report?: any;
+    sources_count?: number;
+    unique_domains?: number;
+    duplicate_ratio?: number;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -197,6 +208,10 @@ async function appendRunIndexMeta(run: RunRecord) {
       return e?.[1] ?? null;
     })(),
     gateReasons: Array.isArray(run.artifacts?.gateReasons) ? run.artifacts.gateReasons : [],
+    anti_overfitting_applied: Boolean(run.config?.anti_overfitting_applied),
+    sources_count: Number(run.artifacts?.sources_count ?? 0),
+    unique_domains: Number(run.artifacts?.unique_domains ?? 0),
+    duplicate_ratio: Number(run.artifacts?.duplicate_ratio ?? 0),
   };
   await fsp.appendFile(runIndexPath, JSON.stringify(meta) + "\n", "utf8");
 }
@@ -265,6 +280,9 @@ async function continueRun(runId: string) {
         };
       }
 
+      if (run.config?.enforce) {
+        step.inputs = { ...(step.inputs ?? {}), enforce: run.config.enforce } as any;
+      }
       const result = await executor(step, process.cwd(), run.id);
 
       const shellLogs = result.logs.filter((l) => l.skill === "shell_run") as any[];
@@ -377,9 +395,15 @@ async function continueRun(runId: string) {
 
     const expectedDocx = path.join(process.cwd(), `docs/exports/${run.id}.docx`);
     const expectedMd = path.join(process.cwd(), `docs/exports/${run.id}.md`);
+    const researchPath = path.join(process.cwd(), `docs/exports/${run.id}.research.md`);
     const fsp = await import("node:fs/promises");
+    const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");
+    const urls = (researchText.match(/https?:\/\/[^\s)]+/g) || []).map((u) => u.replace(/[.,]$/, ""));
+    const domains = urls.map((u) => { try { return new URL(u).hostname.replace(/^www\./,""); } catch { return ""; } }).filter(Boolean);
+    const uniqueDomains = new Set(domains).size;
+    const duplicateRatio = domains.length ? (domains.length - uniqueDomains) / domains.length : 1;
     const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
-    const judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
+    let judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
     const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
     const dims = ["thesis_prompt", "structure_coherence", "evidence_specificity", "counterarguments_nuance", "clarity_style", "citations_integrity"];
     const judge_delta = judge_v1 && judge_v2
@@ -397,7 +421,17 @@ async function continueRun(runId: string) {
       if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
       return out;
     })();
-    const gatePassed = Boolean(judge_v2?.must_fix_gate);
+    if (run.config?.enforce) {
+      if (uniqueDomains < Number(run.config.enforce.source_diversity_min_domains ?? 1)) gateReasons.push("source_diversity_not_met");
+      if (duplicateRatio > Number(run.config.enforce.max_duplicate_ratio ?? 1)) gateReasons.push("duplicate_ratio_too_high");
+      const eDelta = Number(judge_delta?.evidence_specificity ?? 0);
+      const cDelta = Number(judge_delta?.citations_integrity ?? 0);
+      if (Math.max(eDelta, cDelta) < Number(run.config.enforce.evidence_or_citations_delta_min ?? 1)) gateReasons.push("insufficient_evidence_or_citations_improvement");
+      if (gateReasons.length) {
+        judge_v2 = { ...(judge_v2 || {}), must_fix_gate: false };
+      }
+    }
+    const gatePassed = Boolean(judge_v2?.must_fix_gate) && gateReasons.length === 0;
     let docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
     if (!gatePassed && docxExists) {
       await fsp.unlink(expectedDocx).catch(() => undefined);
@@ -414,6 +448,9 @@ async function continueRun(runId: string) {
       judge_delta,
       gateReasons,
       revision_report,
+      sources_count: urls.length,
+      unique_domains: uniqueDomains,
+      duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       exportStatus: gatePassed ? "exported" : "draft_only_not_exported",
     };
     pushLog(run, gatePassed && docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
@@ -452,6 +489,14 @@ app.post("/run", (req, res) => {
   const roleAssignmentsByRole = req.body?.roleAssignmentsByRole && typeof req.body.roleAssignmentsByRole === "object"
     ? Object.fromEntries(Object.entries(req.body.roleAssignmentsByRole).map(([k, v]) => [String(k), String(v ?? "none")]))
     : undefined;
+  const enforce = req.body?.enforce && typeof req.body.enforce === "object"
+    ? {
+        evidence_or_citations_delta_min: Number(req.body.enforce.evidence_or_citations_delta_min ?? 1),
+        source_diversity_min_domains: Number(req.body.enforce.source_diversity_min_domains ?? 1),
+        max_duplicate_ratio: Number(req.body.enforce.max_duplicate_ratio ?? 1),
+      }
+    : undefined;
+  const anti_overfitting_applied = Boolean(req.body?.anti_overfitting_applied);
 
   const runId = makeRunId();
   const record: RunRecord = {
@@ -468,6 +513,8 @@ app.post("/run", (req, res) => {
       workflowStages,
       roles,
       roleAssignmentsByRole,
+      enforce,
+      anti_overfitting_applied,
     },
     pendingStepId: null,
     pendingReason: null,
@@ -598,6 +645,10 @@ app.get("/runs", (req, res) => {
       })(),
       gate: r.artifacts?.judge_v2?.must_fix_gate ?? null,
       gateReasons: Array.isArray(r.artifacts?.gateReasons) ? r.artifacts.gateReasons.slice(0,2) : [],
+      anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
+      sources_count: r.artifacts?.sources_count ?? null,
+      unique_domains: r.artifacts?.unique_domains ?? null,
+      duplicate_ratio: r.artifacts?.duplicate_ratio ?? null,
     }));
 
   return res.json(list);
@@ -632,6 +683,10 @@ app.post("/quality/export-csv", async (req, res) => {
       v2_score: r.v2_score,
       top_delta: { dimension: r.top_delta_dim, delta: r.top_delta_val },
       gateReasons: r.gateReasons || [],
+      anti_overfitting_applied: r.anti_overfitting_applied ?? false,
+      sources_count: r.sources_count ?? "",
+      unique_domains: r.unique_domains ?? "",
+      duplicate_ratio: r.duplicate_ratio ?? "",
     }));
     dataSource = "persisted index";
   }
@@ -643,9 +698,9 @@ app.post("/quality/export-csv", async (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const outPath = path.join(qualityDir, `quality_window_${windowN}_${ts}.csv`);
   const esc = (v: any) => `"${String(v ?? "").replaceAll('"','""')}"`;
-  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","gateReasons_joined"].join(",");
+  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
   const lines = rows.map((r: any) => [
-    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta?.dimension ?? ""), esc(r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|"))
+    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta?.dimension ?? ""), esc(r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
   ].join(","));
   await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
