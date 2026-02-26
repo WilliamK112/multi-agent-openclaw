@@ -241,6 +241,16 @@
         <div id="trend-dimensions" style="margin-top:6px;font-size:.82rem;"></div>
         <div id="trend-sparkline" style="margin-top:8px;font-family:ui-monospace,monospace;font-size:1rem;letter-spacing:1px;"></div>
       </div>
+      <div class="panel" style="margin-bottom:12px;">
+        <h3>Action Panel</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="clear-btn" id="suggest-fix-btn">Suggest Fix for Top Failure</button>
+          <button class="clear-btn" id="anti-overfit-btn" disabled>Anti-Overfitting Next Run</button>
+          <button class="clear-btn" id="export-quality-csv-btn">Export Quality CSV</button>
+        </div>
+        <div id="action-hint" style="font-size:.82rem;opacity:.9;margin-top:8px;">No action generated yet.</div>
+        <div class="json-preview" id="action-preset-preview"></div>
+      </div>
       <div id="runs-list"></div>
       <div id="detail-panel" class="detail-panel" style="display: none;">
         <h3>Run details</h3>
@@ -257,6 +267,7 @@
     let allRunsCache = [];
     let trendWindow = 50;
     let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
+    let trendState = { filteredRuns: [], topReason: null, overfitWarning: null };
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
@@ -312,6 +323,11 @@
     const trendReasonsEl = document.getElementById('trend-reasons');
     const trendDimensionsEl = document.getElementById('trend-dimensions');
     const trendSparklineEl = document.getElementById('trend-sparkline');
+    const suggestFixBtn = document.getElementById('suggest-fix-btn');
+    const antiOverfitBtn = document.getElementById('anti-overfit-btn');
+    const exportQualityCsvBtn = document.getElementById('export-quality-csv-btn');
+    const actionHintEl = document.getElementById('action-hint');
+    const actionPresetPreviewEl = document.getElementById('action-preset-preview');
     const roleBoardEl = document.getElementById('role-board');
     const workflowBoardEl = document.getElementById('workflow-board');
     const workflowAgentsEl = document.getElementById('workflow-available-agents');
@@ -802,6 +818,14 @@
         ? `<span style="color:#fcd34d;">Overfitting risk: top_delta mostly ${escapeHtml(String(focusTop[0]))}. Consider enforcing evidence/citations improvement.</span>`
         : 'No overfitting signal';
 
+      trendState = {
+        filteredRuns: runsWindow,
+        topReason: topReasons.length ? topReasons[0][0] : null,
+        overfitWarning: overfitWarn ? String(focusTop[0]) : null,
+      };
+      antiOverfitBtn.disabled = !trendState.overfitWarning;
+      antiOverfitBtn.title = trendState.overfitWarning ? '' : 'No warning';
+
       trendSparklineEl.innerHTML = `Score sparkline (M=${scoredCount}): ${spark(scores.slice(0,50))}<br>` +
         `Gate sparkline (N=${totalRuns}): ${gateSpark(runsWindow.map(r=>r.gate).slice(0,50))}<br>` +
         `Overfitting check (last 10 scored runs): ${overfitText}`;
@@ -1074,6 +1098,82 @@
     clearTrendFilterBtn.addEventListener('click', () => {
       trendFilter = null;
       renderRuns(allRunsCache);
+    });
+
+    suggestFixBtn.addEventListener('click', () => {
+      const reason = trendState.topReason;
+      if (!reason) {
+        actionHintEl.textContent = 'No failure reason in current window.';
+        actionPresetPreviewEl.textContent = '';
+        return;
+      }
+      let preset;
+      if (reason === 'minSources_not_met') {
+        preset = {
+          goalHint: 'Increase source coverage and reduce brittle minSources',
+          workflowTweaks: [
+            'Enable tavily-search:tool in research stage',
+            'Add notes: sources diversification note (3+ domains)',
+            'Adjust minSources from 12 to 10 when search budget is constrained'
+          ],
+          why: 'Top failure is source insufficiency; this preset increases source breadth without over-costing.'
+        };
+      } else if (reason === 'insufficient_evidence_or_citations_improvement') {
+        preset = {
+          goalHint: 'Force evidence/citation improvement on revision',
+          workflowTweaks: [
+            'Require evidence_specificity or citations_integrity +2 in v2',
+            'Add 2+ non-duplicate sources in revision',
+            'Insert 2 concrete fact points (place/institution/year/data)'
+          ],
+          why: 'Top failure indicates weak evidence progression across judge loop.'
+        };
+      } else {
+        preset = {
+          goalHint: `Address top failure: ${reason}`,
+          workflowTweaks: ['Review gate reason and add targeted revision instruction', 'Lower brittle constraints when budget-limited'],
+          why: 'Generated generic fix based on top gate reason.'
+        };
+      }
+      actionHintEl.textContent = `Suggested fix generated for top failure: ${reason}`;
+      actionPresetPreviewEl.textContent = JSON.stringify(preset, null, 2);
+    });
+
+    antiOverfitBtn.addEventListener('click', () => {
+      if (!trendState.overfitWarning) {
+        actionHintEl.textContent = 'No warning';
+        return;
+      }
+      const preset = {
+        goalHint: 'Anti-overfitting next run preset',
+        enforce: {
+          evidence_or_citations_delta_min: 2,
+          source_diversity_min_domains: 3,
+        },
+        revisionPolicy: [
+          'Require v2 evidence_specificity or citations_integrity >= +2',
+          'Require at least 3 distinct source domains/categories',
+          'Block export when only one dimension repeatedly dominates top_delta'
+        ]
+      };
+      actionHintEl.textContent = `Anti-overfitting preset generated (warning on ${trendState.overfitWarning}).`;
+      actionPresetPreviewEl.textContent = JSON.stringify(preset, null, 2);
+    });
+
+    exportQualityCsvBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API}/quality/export-csv`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ window: trendWindow, rows: trendState.filteredRuns || [] }),
+        });
+        const out = await res.json();
+        if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+        actionHintEl.textContent = `Exported quality CSV: ${out.path}`;
+        actionPresetPreviewEl.textContent = JSON.stringify(out, null, 2);
+      } catch (e) {
+        actionHintEl.textContent = `CSV export failed: ${e.message}`;
+      }
     });
 
     detectOpenClawActive();

@@ -576,6 +576,24 @@ app.get("/runs/:runId", (req, res) => {
   return res.json(run);
 });
 
+app.post("/quality/export-csv", async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const windowN = Number(req.body?.window ?? rows.length ?? 0);
+  if (!rows.length) return res.status(400).json({ error: "No rows to export" });
+  const fsp = await import("node:fs/promises");
+  const qualityDir = path.join(process.cwd(), "docs/quality");
+  await fsp.mkdir(qualityDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const outPath = path.join(qualityDir, `quality_window_${windowN}_${ts}.csv`);
+  const esc = (v: any) => `"${String(v ?? "").replaceAll('"','""')}"`;
+  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","gateReasons_joined"].join(",");
+  const lines = rows.map((r: any) => [
+    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta?.dimension ?? ""), esc(r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|"))
+  ].join(","));
+  await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
+  return res.json({ ok: true, path: outPath, count: rows.length });
+});
+
 app.post("/runs/:runId/open-output", async (req, res) => {
   const run = runs.get(req.params.runId);
   if (!run) return res.status(404).json({ error: "Run not found" });
