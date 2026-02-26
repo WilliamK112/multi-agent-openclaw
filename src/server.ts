@@ -36,6 +36,7 @@ type EnforceConfig = {
   evidence_or_citations_delta_min?: number;
   source_diversity_min_domains?: number;
   max_duplicate_ratio?: number;
+  facts_count_min?: number;
 };
 
 type RunRecord = {
@@ -72,6 +73,7 @@ type RunRecord = {
     sources_count?: number;
     unique_domains?: number;
     duplicate_ratio?: number;
+    facts_count?: number;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -247,6 +249,7 @@ async function appendRunIndexMeta(run: RunRecord) {
     sources_count: Number(run.artifacts?.sources_count ?? 0),
     unique_domains: Number(run.artifacts?.unique_domains ?? 0),
     duplicate_ratio: Number(run.artifacts?.duplicate_ratio ?? 0),
+    facts_count: Number(run.artifacts?.facts_count ?? 0),
   };
   await fsp.appendFile(runIndexPath, JSON.stringify(meta) + "\n", "utf8");
 }
@@ -315,8 +318,12 @@ async function continueRun(runId: string) {
         };
       }
 
-      if (run.config?.enforce) {
-        step.inputs = { ...(step.inputs ?? {}), enforce: run.config.enforce } as any;
+      if (run.config?.enforce || run.config?.anti_overfitting_applied) {
+        step.inputs = {
+          ...(step.inputs ?? {}),
+          enforce: run.config?.enforce,
+          anti_overfitting_applied: Boolean(run.config?.anti_overfitting_applied),
+        } as any;
       }
       const result = await executor(step, process.cwd(), run.id);
 
@@ -433,10 +440,13 @@ async function continueRun(runId: string) {
     const researchPath = path.join(process.cwd(), `docs/exports/${run.id}.research.md`);
     const fsp = await import("node:fs/promises");
     const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");
+    const finalMdText = await fsp.readFile(expectedMd, "utf8").catch(() => "");
     const urls = (researchText.match(/https?:\/\/[^\s)]+/g) || []).map((u) => u.replace(/[.,]$/, ""));
     const domains = urls.map((u) => { try { return new URL(u).hostname.replace(/^www\./,""); } catch { return ""; } }).filter(Boolean);
     const uniqueDomains = new Set(domains).size;
     const duplicateRatio = domains.length ? (domains.length - uniqueDomains) / domains.length : 1;
+    const factLinePattern = /\b(19\d{2}|20\d{2})\b|\b\d{2,}\b|\b(University|Department|Madison|Wisconsin|NOAA|USDA|Census|BLS|HUD|EPA|DOT)\b/i;
+    const factsCount = finalMdText.split(/\n+/).map((ln) => ln.trim()).filter((ln) => ln && factLinePattern.test(ln)).length;
     const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
     let judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
     const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
@@ -463,6 +473,10 @@ async function continueRun(runId: string) {
       const eDelta = Number(judge_delta?.evidence_specificity ?? 0);
       const cDelta = Number(judge_delta?.citations_integrity ?? 0);
       if (Math.max(eDelta, cDelta) < Number(run.config.enforce.evidence_or_citations_delta_min ?? 1)) gateReasons.push("insufficient_evidence_or_citations_improvement");
+      if (Boolean(run.config?.anti_overfitting_applied)) {
+        const minFacts = Number((run.config?.enforce as any)?.facts_count_min ?? 2);
+        if (factsCount < minFacts) gateReasons.push("facts_count_not_met");
+      }
       if (gateReasons.length) {
         judge_v2 = { ...(judge_v2 || {}), must_fix_gate: false };
       }
@@ -489,6 +503,7 @@ async function continueRun(runId: string) {
       sources_count: urls.length,
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
+      facts_count: factsCount,
       exportStatus: gatePassed ? "exported" : "draft_only_not_exported",
     };
     pushLog(run, gatePassed && docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
@@ -532,6 +547,7 @@ app.post("/run", (req, res) => {
         evidence_or_citations_delta_min: Number(req.body.enforce.evidence_or_citations_delta_min ?? 1),
         source_diversity_min_domains: Number(req.body.enforce.source_diversity_min_domains ?? 1),
         max_duplicate_ratio: Number(req.body.enforce.max_duplicate_ratio ?? 1),
+        facts_count_min: Number(req.body.enforce.facts_count_min ?? 2),
       }
     : undefined;
   const anti_overfitting_applied = Boolean(req.body?.anti_overfitting_applied);
@@ -683,6 +699,7 @@ app.get("/runs", (req, res) => {
       sources_count: r.artifacts?.sources_count ?? null,
       unique_domains: r.artifacts?.unique_domains ?? null,
       duplicate_ratio: r.artifacts?.duplicate_ratio ?? null,
+      facts_count: r.artifacts?.facts_count ?? null,
     }));
 
   return res.json(list);
@@ -723,6 +740,7 @@ app.post("/quality/export-csv", async (req, res) => {
       sources_count: r.sources_count ?? "",
       unique_domains: r.unique_domains ?? "",
       duplicate_ratio: r.duplicate_ratio ?? "",
+      facts_count: r.facts_count ?? "",
     }));
     dataSource = "persisted index";
   }
@@ -734,9 +752,9 @@ app.post("/quality/export-csv", async (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const outPath = path.join(qualityDir, `quality_window_${windowN}_${ts}.csv`);
   const esc = (v: any) => `"${String(v ?? "").replaceAll('"','""')}"`;
-  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","top_delta_raw_dim","top_delta_raw_val","top_delta_effective_dim","top_delta_effective_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
+  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","top_delta_raw_dim","top_delta_raw_val","top_delta_effective_dim","top_delta_effective_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio","facts_count"].join(",");
   const lines = rows.map((r: any) => [
-    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_effective?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_effective?.delta ?? r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
+    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_effective?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_effective?.delta ?? r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? ""), esc(r.facts_count ?? "")
   ].join(","));
   await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
