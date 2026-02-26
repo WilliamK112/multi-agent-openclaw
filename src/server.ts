@@ -361,6 +361,7 @@ async function continueRun(runId: string) {
       if (g.sources_ok === false) out.push("minSources not met");
       if (g.words_ok === false) out.push("minWords not met");
       if (g.force_gate_fail === false) out.push("force_gate_fail");
+      if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
       return out;
     })();
     const gatePassed = Boolean(judge_v2?.must_fix_gate);

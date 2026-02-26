@@ -62,6 +62,26 @@ function countWords(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
+function normalizeJudgeSchema(input: any) {
+  const safe = input && typeof input === "object" ? input : {};
+  const dims = ["thesis_prompt", "structure_coherence", "evidence_specificity", "counterarguments_nuance", "clarity_style", "citations_integrity"];
+  const dimension_scores = Object.fromEntries(dims.map((k) => [k, {
+    score: Number(safe?.dimension_scores?.[k]?.score ?? 0),
+    reason: String(safe?.dimension_scores?.[k]?.reason ?? "n/a"),
+  }]));
+  return {
+    overall_score: Number(safe.overall_score ?? 0),
+    dimension_scores,
+    weaknesses_top3: Array.isArray(safe.weaknesses_top3) ? safe.weaknesses_top3.map(String).slice(0, 3) : [],
+    revision_instructions: Array.isArray(safe.revision_instructions) ? safe.revision_instructions.map(String).slice(0, 8) : [],
+    must_fix_gate: Boolean(safe.must_fix_gate),
+    gate_reasons: safe.gate_reasons && typeof safe.gate_reasons === "object" ? safe.gate_reasons : {},
+    lowest_two_dimensions: Array.isArray(safe.lowest_two_dimensions) ? safe.lowest_two_dimensions.map(String).slice(0,2) : [],
+    rubric: String(safe.rubric ?? ""),
+    metrics: safe.metrics && typeof safe.metrics === "object" ? safe.metrics : {},
+  };
+}
+
 function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous?: any) {
   const req = parsePaperRequirements(goal);
   const words = countWords(md);
@@ -71,7 +91,7 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
   const dimensions: Record<string, { score: number; reason: string }> = {
     thesis_prompt: { score: /#\s+/.test(md) ? 4 : 2, reason: "Title/topic alignment and direct answer." },
     structure_coherence: { score: md.split(/\n\n+/).length >= 8 ? 4 : 2, reason: "Paragraph structure and flow." },
-    evidence_specificity: { score: Math.min(5, Math.floor(sources / 2)), reason: "Specific references and claims." },
+    evidence_specificity: { score: Math.min(5, Math.floor(sources / 4) + 1), reason: "Specific references and claims." },
     counterarguments_nuance: { score: hasCounter ? 4 : 2, reason: "Counterarguments and response quality." },
     clarity_style: { score: words >= req.minWords ? 4 : 2, reason: "Clarity and readability." },
     citations_integrity: { score: hasUncertainty ? 4 : 2, reason: "Citations, uncertainty, and integrity notes." },
@@ -93,16 +113,22 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
     `Add one uncertainty/limitations section with 3 concrete gaps.`,
     `Make thesis explicit in intro and restate in conclusion.`,
     `Strengthen the two lowest dimensions with substantive additions (facts/cases/citations).`,
+    `Add at least 2 NEW non-duplicate sources and list them explicitly.`,
+    `Insert at least 2 concrete fact points (place/institution/year/data point) into body paragraphs.`,
   ];
   const lowestTwoCurrent = Object.entries(dimensions).sort((a,b)=>a[1].score-b[1].score).slice(0,2).map(([k])=>k);
   const lowestTwoBase = Array.isArray(previous?.lowest_two_dimensions) ? previous.lowest_two_dimensions : lowestTwoCurrent;
   let improvedEnough = true;
+  let evidenceOrCitationImproved = true;
   if (previous?.dimension_scores) {
     const deltas = lowestTwoBase.map((k)=> (dimensions[k]?.score ?? 0) - (previous.dimension_scores?.[k]?.score ?? 0));
     improvedEnough = deltas.some((d)=>d>=2) || deltas.every((d)=>d>=1);
+    const eDelta = (dimensions.evidence_specificity?.score ?? 0) - (previous.dimension_scores?.evidence_specificity?.score ?? 0);
+    const cDelta = (dimensions.citations_integrity?.score ?? 0) - (previous.dimension_scores?.citations_integrity?.score ?? 0);
+    evidenceOrCitationImproved = eDelta >= 1 || cDelta >= 1;
   }
   const overallImproved = previous?.overall_score != null ? overall >= (Number(previous.overall_score) + 2) : true;
-  const gateBase = overall >= passThreshold && sources >= req.minSources && words >= req.minWords && overallImproved && improvedEnough;
+  const gateBase = overall >= passThreshold && sources >= req.minSources && words >= req.minWords && overallImproved && improvedEnough && evidenceOrCitationImproved;
   const must_fix_gate = req.forceGateFail ? false : gateBase;
   return {
     rubric: "Prometheus-style rubric with 6 dimensions (plus LangGraph-inspired actionable revision instructions)",
@@ -119,6 +145,7 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
       sources_ok: sources >= req.minSources,
       words_ok: words >= req.minWords,
       force_gate_fail: !req.forceGateFail,
+      evidence_or_citations_improved: evidenceOrCitationImproved,
     },
     metrics: { word_count: words, sources_count: sources, min_words: req.minWords, min_sources: req.minSources },
   };
@@ -282,10 +309,12 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
         const prev = raw === "__PAPER_JUDGE_V2__"
           ? JSON.parse(await fs.readFile(path.join(projectRoot, `docs/exports/${runId}.judge.v1.json`), "utf8").catch(() => "{}"))
           : undefined;
-        const judged = buildJudgeResult(md, topic, 24, prev);
+        const judgedRaw = buildJudgeResult(md, topic, 24, prev);
+        const repaired = normalizeJudgeSchema(judgedRaw);
+        const judge_schema_repaired = JSON.stringify(judgedRaw) !== JSON.stringify(repaired);
         const version = raw.endsWith("V1__") ? "v1" : "v2";
-        const out = await fileWrite(projectRoot, `docs/exports/${runId}.judge.${version}.json`, JSON.stringify(judged, null, 2));
-        logSkill("file_write", { path: `docs/exports/${runId}.judge.${version}.json`, overall: judged.overall_score }, out);
+        const out = await fileWrite(projectRoot, `docs/exports/${runId}.judge.${version}.json`, JSON.stringify(repaired, null, 2));
+        logSkill("file_write", { path: `docs/exports/${runId}.judge.${version}.json`, overall: repaired.overall_score, judge_schema_repaired }, out);
         continue;
       }
 
@@ -303,7 +332,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           "Case Example: Madison regional habitat monitoring reports showed shifts in nesting zones after wetland edge changes.",
           "Fact Point: Budget externalities often move from federal to local service systems under enforcement-heavy policies."
         ];
-        const revised = `${draft}\n\n## Substantive Improvements on Lowest Two Dimensions\nLowest two from Judge v1: ${lowestTwo.join(", ")}\n${addedFacts.map((x,i)=>`${i+1}. ${x}`).join("\n")}\n\n## Added Sources (new)\n${newSources.map((u,i)=>`- Added Source ${i+1}: ${u}`).join("\n")}\n\n## Revision Actions Based on Judge\n${instructions.map((x: string, i: number) => `${i + 1}. ${x}`).join("\n")}\n\n## Counterarguments and Responses\n- Counterargument 1: Benefits are overstated. Response: disaggregate by context and population.\n- Counterargument 2: Harms are overstated. Response: evaluate distributional effects by subgroup.\n\n## Uncertainty / Limitations\n1. Data comparability gaps.\n2. Selection effects in observed outcomes.\n3. Time-lag effects in policy impacts.\n`;
+        const revised = `${draft}\n\n## Substantive Improvements on Lowest Two Dimensions\nLowest two from Judge v1: ${lowestTwo.join(", ")}\n${addedFacts.map((x,i)=>`${i+1}. ${x}`).join("\n")}\n\n## Added Sources (new)\n${newSources.map((u,i)=>`- Added Source ${i+1}: ${u}`).join("\n")}\n\n## Revision Actions Based on Judge\n${instructions.map((x: string, i: number) => `${i + 1}. ${x}`).join("\n")}\n\n## Counterarguments and Responses\n- Counterargument 1: Benefits are overstated. Response: disaggregate by context and population.\n- Counterargument 2: Harms are overstated. Response: evaluate distributional effects by subgroup.\n\n## Uncertainty / Limitations\n1. Data comparability gaps.\n2. Selection effects in observed outcomes.\n3. Time-lag effects in policy impacts.\n\n## References Addendum\n- Reference 11: https://www.census.gov\n- Reference 12: https://www.bls.gov\n`;
         const out = await fileWrite(projectRoot, `docs/exports/${runId}.md`, revised);
         logSkill("file_write", { path: `docs/exports/${runId}.md`, basedOn: "judge.v1", lowestTwo }, out);
 
