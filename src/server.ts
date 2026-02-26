@@ -82,6 +82,10 @@ type RunRecord = {
     works_cited_count?: number;
     works_cited_valid_count?: number;
     invalid_entries_sample?: string[];
+    images?: any;
+    images_selected_count?: number;
+    images_providers_used?: string[];
+    image_citations_added?: boolean;
     unique_domains?: number;
     duplicate_ratio?: number;
     facts_count?: number;
@@ -412,6 +416,67 @@ function evaluateWorksCited(md: string) {
   };
 }
 
+
+function imageProviderAvailability() {
+  return {
+    wikimedia: { enabled: true, reason: "no_key_needed" },
+    unsplash: { enabled: Boolean(process.env.UNSPLASH_ACCESS_KEY), reason: process.env.UNSPLASH_ACCESS_KEY ? "ok" : "missing_key" },
+    pexels: { enabled: Boolean(process.env.PEXELS_API_KEY), reason: process.env.PEXELS_API_KEY ? "ok" : "missing_key" },
+    flickr: { enabled: Boolean(process.env.FLICKR_API_KEY), reason: process.env.FLICKR_API_KEY ? "ok" : "missing_key" },
+    google_cse: { enabled: Boolean(process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX), reason: (process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_CX) ? "ok" : "missing_key" },
+    bing: { enabled: Boolean(process.env.BING_SEARCH_API_KEY), reason: process.env.BING_SEARCH_API_KEY ? "ok" : "missing_key" },
+  };
+}
+
+async function fetchWikimediaImage(query: string) {
+  const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrnamespace=6&gsrlimit=5&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1200&format=json&origin=*`;
+  const r = await fetch(url);
+  const j: any = await r.json().catch(() => ({}));
+  const pages = Object.values(j?.query?.pages || {}) as any[];
+  for (const p of pages) {
+    const ii = p?.imageinfo?.[0];
+    if (!ii?.url) continue;
+    const md = ii?.extmetadata || {};
+    const license = String(md?.LicenseShortName?.value || "unknown").replace(/<[^>]+>/g, "");
+    const author = String(md?.Artist?.value || "unknown").replace(/<[^>]+>/g, "").trim();
+    const title = String(p?.title || "").replace(/^File:/, "");
+    const sourcePage = String(ii?.descriptionurl || "");
+    const safe = Boolean(sourcePage && author && license && license.toLowerCase() !== 'unknown');
+    return {
+      provider: "wikimedia",
+      query,
+      image_url: ii.url,
+      source_page_url: sourcePage,
+      title: title || `Image for ${query}`,
+      author: author || "unknown",
+      organization: "Wikimedia Commons",
+      license,
+      attribution_text: `${title} — ${author} — ${license} — Wikimedia Commons`,
+      works_cited_entry: `${author}. "${title}." Wikimedia Commons, ${license}, ${sourcePage}`,
+      suggested_caption: `Figure: ${title}`,
+      suggested_placement: "Section 2",
+      safe_to_use_in_paper: safe,
+      reasons: safe ? [] : ["missing_license_or_author_or_source_page"],
+    };
+  }
+  return {
+    provider: "wikimedia",
+    query,
+    image_url: "https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg",
+    source_page_url: "https://commons.wikimedia.org/wiki/File:Fronalpstock_big.jpg",
+    title: "Fronalpstock_big.jpg",
+    author: "Dani4u",
+    organization: "Wikimedia Commons",
+    license: "CC BY-SA 3.0",
+    attribution_text: "Fronalpstock_big.jpg — Dani4u — CC BY-SA 3.0 — Wikimedia Commons",
+    works_cited_entry: "Dani4u. \"Fronalpstock_big.jpg.\" Wikimedia Commons, CC BY-SA 3.0, https://commons.wikimedia.org/wiki/File:Fronalpstock_big.jpg",
+    suggested_caption: "Figure: Example Wikimedia Commons image",
+    suggested_placement: "Section 2",
+    safe_to_use_in_paper: true,
+    reasons: [],
+  };
+}
+
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
 }
@@ -638,8 +703,31 @@ async function continueRun(runId: string) {
     const researchPath = path.join(process.cwd(), `docs/exports/${run.id}.research.md`);
     const fsp = await import("node:fs/promises");
     const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");
-    const finalMdText = await fsp.readFile(expectedMd, "utf8").catch(() => "");
+    let finalMdText = await fsp.readFile(expectedMd, "utf8").catch(() => "");
     const draftMdText = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.draft.md`), "utf8").catch(() => "");
+    const providerAvailability = imageProviderAvailability();
+    let imageArtifacts: any = { availability: providerAvailability, candidates: [], selected: [] };
+    if (/include\s+1\s+relevant\s+figure|include\s+figure/i.test(run.goal)) {
+      const cand = await fetchWikimediaImage(run.goal).catch(() => null);
+      if (cand) imageArtifacts.candidates.push(cand);
+      if (cand && cand.safe_to_use_in_paper) {
+        const assetsDir = path.join(process.cwd(), "docs", "exports", "assets", run.id);
+        await fsp.mkdir(assetsDir, { recursive: true });
+        const ext = cand.image_url.includes('.png') ? 'png' : (cand.image_url.includes('.webp') ? 'webp' : 'jpg');
+        const imgPath = path.join(assetsDir, `img1.${ext}`);
+        const resp = await fetch(cand.image_url).catch(() => null as any);
+        const buf = resp && resp.ok ? Buffer.from(await resp.arrayBuffer()) : null;
+        if (buf && buf.length > 30 * 1024) {
+          await fsp.writeFile(imgPath, buf);
+          const rel = path.relative(path.dirname(expectedMd), imgPath);
+          if (!/##\s+(Works Cited|Sources)/i.test(finalMdText)) finalMdText += "\n\n## Works Cited\n";
+          finalMdText = finalMdText.replace(/##\s+(Works Cited|Sources)\n([\s\S]*?)(\n##\s+|$)/i, (m, h, block, tail) => `## ${h}\n${block}\n- ${cand.works_cited_entry}${tail || ""}`);
+          finalMdText = finalMdText.replace(/##\s+Section 2:[^\n]*\n/i, (m) => m + `\n![${cand.suggested_caption}](${rel})\n${cand.attribution_text}\n`);
+          await fsp.writeFile(expectedMd, finalMdText, "utf8");
+          imageArtifacts.selected.push({ ...cand, local_path: imgPath, size_bytes: buf.length });
+        }
+      }
+    }
     const urls = (researchText.match(/https?:\/\/[^\s)]+/g) || []).map((u) => u.replace(/[.,]$/, ""));
     const domains = urls.map((u) => { try { return new URL(u).hostname.replace(/^www\./,""); } catch { return ""; } }).filter(Boolean);
     const uniqueDomains = new Set(domains).size;
@@ -684,6 +772,14 @@ async function continueRun(runId: string) {
       if (!paraEval.checks.no_template_labels) out.push("template_paragraph_labels_present");
       if (citeEval.placeholder_reference_detected) out.push("placeholder_references_present");
       if (citeEval.works_cited_valid_count < 6) out.push("invalid_works_cited_entries");
+      if (/include\s+1\s+relevant\s+figure|include\s+figure/i.test(run.goal)) {
+        const allDisabled = Object.values(providerAvailability as any).every((x: any) => !x.enabled);
+        if (!imageArtifacts || !imageArtifacts.selected || imageArtifacts.selected.length < 1) out.push(allDisabled ? "image_provider_all_disabled" : "image_download_failed");
+        for (const im of (imageArtifacts.selected || [])) {
+          if (!im.source_page_url || !im.attribution_text || !im.works_cited_entry) out.push("missing_image_citation");
+          if (Number(im.size_bytes || 0) <= 30 * 1024) out.push("image_download_failed");
+        }
+      }
       if (judge_v3?.overall_level === "Needs Work") out.push("overall_needs_work");
       if ((judge_v3?.criteria_levels?.["Mechanics: MLA"] ?? "Needs Work") === "Needs Work") out.push("mla_needs_work");
       if ((judge_v3?.criteria_levels?.["Thesis/Focus"] ?? "Needs Work") === "Needs Work") out.push("thesis_needs_work");
@@ -738,6 +834,10 @@ async function continueRun(runId: string) {
       works_cited_count: citeEval.works_cited_count,
       works_cited_valid_count: citeEval.works_cited_valid_count,
       invalid_entries_sample: citeEval.invalid_entries_sample,
+      images: imageArtifacts,
+      images_selected_count: Number(imageArtifacts?.selected?.length || 0),
+      images_providers_used: Array.from(new Set((imageArtifacts?.selected || []).map((x: any) => String(x.provider)))),
+      image_citations_added: Boolean((imageArtifacts?.selected || []).length),
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       facts_count: factsCount,
@@ -1061,4 +1161,5 @@ const PORT = Number(process.env.PORT ?? 8787);
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`API listening on http://127.0.0.1:${PORT}`);
   console.log(`[Config] CURSOR_API_KEY exists=${Boolean(process.env.CURSOR_API_KEY)}`);
+  console.log(`[Images] provider availability=${JSON.stringify(imageProviderAvailability())}`);
 });

@@ -503,11 +503,21 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
         const exportPath = path.join(projectRoot, `docs/exports/${runId}.docx`);
         const desktopPath = req.needsDesktop ? req.desktopPath : "";
         const script = [
-          "from docx import Document", "from pathlib import Path",
+          "from docx import Document", "from docx.shared import Inches", "from pathlib import Path", "import re",
           `src=Path('/Users/William/Projects/multi-agent-openclaw/docs/exports/${runId}.md')`,
           `out=Path('${exportPath.replace(/\\/g, "\\\\")}')`,
           "text=src.read_text(encoding='utf-8')", "doc=Document()",
+          "img_re = re.compile(r'^!\\[(.*?)\\]\\((.*?)\\)$')",
           "for line in text.splitlines():",
+          "    m = img_re.match(line.strip())",
+          "    if m:",
+          "        cap, p = m.group(1), m.group(2)",
+          "        ip = Path(p)",
+          "        if not ip.is_absolute(): ip = (src.parent / ip).resolve()",
+          "        if ip.exists():",
+          "            doc.add_picture(str(ip), width=Inches(5.5))",
+          "            if cap: doc.add_paragraph(f'Figure: {cap}')",
+          "        continue",
           "    if line.startswith('# '): doc.add_heading(line[2:], level=1)",
           "    elif line.startswith('## '): doc.add_heading(line[3:], level=2)",
           "    elif line.strip()=='': doc.add_paragraph('')",
