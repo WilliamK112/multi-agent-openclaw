@@ -70,6 +70,9 @@ type RunRecord = {
     top_delta_effective?: { dimension: string | null; delta: number | null };
     gateReasons?: string[];
     revision_report?: any;
+    judge_v3?: any;
+    repeat_flags?: boolean;
+    repeat_details?: any;
     sources_count?: number;
     unique_domains?: number;
     duplicate_ratio?: number;
@@ -218,6 +221,62 @@ function getEffectiveTopDelta(judgeDelta: any, antiOverfittingApplied: boolean):
   return { raw, effective };
 }
 
+function detectRepeatSignals(md: string, goal: string) {
+  const lines = md.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  const starters = lines.filter((x) => !x.startsWith("#") && x.length > 30).slice(0, 20).map((x) => x.slice(0, 80).toLowerCase());
+  const starterCount = new Map<string, number>();
+  for (const s of starters) starterCount.set(s, (starterCount.get(s) ?? 0) + 1);
+  const repeatedStarters = Array.from(starterCount.entries()).filter(([, n]) => n >= 2).map(([s]) => s);
+
+  const tokens = md.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const n = 10;
+  const grams = new Map<string, number>();
+  for (let i = 0; i + n <= tokens.length; i++) {
+    const g = tokens.slice(i, i + n).join(" ");
+    grams.set(g, (grams.get(g) ?? 0) + 1);
+  }
+  const repeatedGramHits = Array.from(grams.values()).filter((c) => c >= 2).length;
+  const ngramRepeatRate = grams.size ? repeatedGramHits / grams.size : 0;
+
+  const goalPhrase = goal.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+  const goalPhraseRepeated = goalPhrase.length > 20 && (md.toLowerCase().match(new RegExp(goalPhrase.replace(/\s+/g, "\\s+"), "g")) || []).length >= 2;
+
+  const repeat_flags = repeatedStarters.length > 0 || ngramRepeatRate > 0.03 || goalPhraseRepeated;
+  const reasons = [
+    ...(repeatedStarters.length ? ["repeated_paragraph_starters"] : []),
+    ...(goalPhraseRepeated ? ["goal_phrase_repeated"] : []),
+    ...((repeatedStarters.length > 0 || ngramRepeatRate > 0.03 || goalPhraseRepeated) ? ["repeated_content_detected"] : []),
+  ];
+  return { repeat_flags, reasons, repeat_details: { repeated_starters: repeatedStarters.slice(0, 5), ngram_repeat_rate: Number(ngramRepeatRate.toFixed(4)), goal_phrase_repeated: goalPhraseRepeated } };
+}
+
+function buildJudgeV3FromV2(judgeV2: any, repeatDetected: boolean) {
+  const dimension_scores = {
+    "Thesis & Answering the Prompt": Number(judgeV2?.dimension_scores?.thesis_prompt?.score ?? 0),
+    "Structure & Coherence": Number(judgeV2?.dimension_scores?.structure_coherence?.score ?? 0),
+    "Evidence & Specificity": Number(judgeV2?.dimension_scores?.evidence_specificity?.score ?? 0),
+    "Counterarguments & Nuance": Number(judgeV2?.dimension_scores?.counterarguments_nuance?.score ?? 0),
+    "Clarity & Style": Number(judgeV2?.dimension_scores?.clarity_style?.score ?? 0),
+    "Citations & Integrity": Number(judgeV2?.dimension_scores?.citations_integrity?.score ?? 0),
+  };
+  const items = Object.entries(dimension_scores).sort((a,b)=>Number(a[1])-Number(b[1]));
+  return {
+    model: "openai:gpt-4o-mini",
+    overall_score: Number(judgeV2?.overall_score ?? 0),
+    dimension_scores,
+    weaknesses_top3: items.slice(0,3).map(([k])=>k),
+    revision_instructions: [
+      "Use outline-first drafting with distinct section purposes.",
+      "Do not reuse the same paragraph opener across sections.",
+      "Add at least 6 traceable sources with institution + link.",
+      "Add concrete facts (year/number/institution/place) in each main section.",
+      "Keep counterarguments concise and evidence-grounded.",
+    ],
+    must_fix_gate: Boolean(judgeV2?.must_fix_gate),
+    repeat_detected: Boolean(repeatDetected),
+  };
+}
+
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
 }
@@ -250,6 +309,7 @@ async function appendRunIndexMeta(run: RunRecord) {
     unique_domains: Number(run.artifacts?.unique_domains ?? 0),
     duplicate_ratio: Number(run.artifacts?.duplicate_ratio ?? 0),
     facts_count: Number(run.artifacts?.facts_count ?? 0),
+    repeat_flags: Boolean(run.artifacts?.repeat_flags),
   };
   await fsp.appendFile(runIndexPath, JSON.stringify(meta) + "\n", "utf8");
 }
@@ -447,6 +507,8 @@ async function continueRun(runId: string) {
     const duplicateRatio = domains.length ? (domains.length - uniqueDomains) / domains.length : 1;
     const factLinePattern = /\b(19\d{2}|20\d{2})\b|\b\d{2,}\b|\b(University|Department|Madison|Wisconsin|NOAA|USDA|Census|BLS|HUD|EPA|DOT)\b/i;
     const factsCount = finalMdText.split(/\n+/).map((ln) => ln.trim()).filter((ln) => ln && factLinePattern.test(ln)).length;
+    const wordCount = finalMdText.split(/\s+/).filter(Boolean).length;
+    const sourceCountFinal = (finalMdText.match(/^-\s+Reference\s+\d+/gmi) || []).length;
     const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
     let judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
     const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
@@ -455,6 +517,8 @@ async function continueRun(runId: string) {
       ? Object.fromEntries(dims.map((k) => [k, Number(judge_v2?.dimension_scores?.[k]?.score ?? 0) - Number(judge_v1?.dimension_scores?.[k]?.score ?? 0)]))
       : null;
     const { raw: top_delta_raw, effective: top_delta_effective } = getEffectiveTopDelta(judge_delta, Boolean(run.config?.anti_overfitting_applied));
+    const repeat = detectRepeatSignals(finalMdText, run.goal);
+    const judge_v3 = buildJudgeV3FromV2(judge_v2, repeat.repeat_flags);
     const gateReasons = (() => {
       const g = judge_v2?.gate_reasons ?? {};
       const out: string[] = [];
@@ -465,7 +529,13 @@ async function continueRun(runId: string) {
       if (g.words_ok === false) out.push("minWords_not_met");
       if (g.force_gate_fail === false) out.push("force_gate_fail");
       if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
-      return out;
+      if (repeat.repeat_flags) out.push(...repeat.reasons);
+      if (wordCount < 650) out.push("minWords_not_met");
+      if (sourceCountFinal < 6) out.push("minSources_not_met");
+      if (Number(judge_v3?.overall_score ?? 0) < 24) out.push("rubric_score_too_low");
+      if (Number(judge_v3?.dimension_scores?.["Citations & Integrity"] ?? 0) < 4) out.push("citations_integrity_too_low");
+      if (Number(judge_v3?.dimension_scores?.["Evidence & Specificity"] ?? 0) < 4) out.push("evidence_specificity_too_low");
+      return Array.from(new Set(out));
     })();
     if (run.config?.enforce) {
       if (uniqueDomains < Number(run.config.enforce.source_diversity_min_domains ?? 1)) gateReasons.push("source_diversity_not_met");
@@ -500,6 +570,9 @@ async function continueRun(runId: string) {
       top_delta_effective,
       gateReasons,
       revision_report,
+      judge_v3,
+      repeat_flags: repeat.repeat_flags,
+      repeat_details: repeat.repeat_details,
       sources_count: urls.length,
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
@@ -700,6 +773,7 @@ app.get("/runs", (req, res) => {
       unique_domains: r.artifacts?.unique_domains ?? null,
       duplicate_ratio: r.artifacts?.duplicate_ratio ?? null,
       facts_count: r.artifacts?.facts_count ?? null,
+      repeat_flags: r.artifacts?.repeat_flags ?? null,
     }));
 
   return res.json(list);
