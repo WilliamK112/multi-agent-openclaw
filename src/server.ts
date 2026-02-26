@@ -760,15 +760,27 @@ app.post("/run", (req, res) => {
     try {
       const provider = getProvider();
       const model = getModel(provider);
-      const key = process.env.ANTHROPIC_API_KEY;
-      if (provider === "claude" && !key) {
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+      const openaiKey = process.env.OPENAI_API_KEY;
+      const deepseekKey = process.env.DEEPSEEK_API_KEY;
+      const ollamaBase = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+      if (provider === "claude" && !anthropicKey) {
         throw new Error("Missing ANTHROPIC_API_KEY. Put it in .env");
+      }
+      if (provider === "openai" && !openaiKey) {
+        throw new Error("Missing OPENAI_API_KEY. Put it in .env");
+      }
+      if (provider === "deepseek" && !deepseekKey) {
+        throw new Error("Missing DEEPSEEK_API_KEY. Put it in .env");
       }
 
       pushLog(run, "planner:start");
       pushLog(run, `[Orchestrator] Goal: ${goal}`);
       pushLog(run, `[Orchestrator] LLM provider=${provider}, model=${model}`);
-      pushLog(run, `[Config] ANTHROPIC_API_KEY ${key ? "exists" : "missing"}`);
+      pushLog(run, `[Config] ANTHROPIC_API_KEY ${anthropicKey ? "exists" : "missing"}`);
+      pushLog(run, `[Config] OPENAI_API_KEY ${openaiKey ? "exists" : "missing"}`);
+      pushLog(run, `[Config] DEEPSEEK_API_KEY ${deepseekKey ? "exists" : "missing"}`);
+      pushLog(run, `[Config] OLLAMA_BASE_URL=${ollamaBase}`);
 
       run.plan = await planner(goal, provider, model);
       if (run.plan) {
@@ -929,10 +941,7 @@ app.post("/quality/export-csv", async (req, res) => {
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
 });
 
-async function resolveWhitelistedOutputPath(run: RunRecord) {
-  const target = run.artifacts?.docxPath;
-  if (!target) return { error: "No exported docx for this run", code: 400 as const, real: null as string | null };
-
+async function resolveWhitelistedOutputPathByPath(target: string, runForLog?: RunRecord) {
   const fsp = await import("node:fs/promises");
   const real = await fsp.realpath(target).catch(() => null);
   if (!real) return { error: "File not found", code: 404 as const, real: null as string | null };
@@ -943,27 +952,32 @@ async function resolveWhitelistedOutputPath(run: RunRecord) {
   const inExports = real.startsWith(exportsRoot);
   const inDesktop = allowDesktop && real.startsWith(desktopRoot);
   if (!inExports && !inDesktop) {
-    pushLog(run, "open_output: denied (path outside whitelist)");
+    if (runForLog) pushLog(runForLog, "open_output: denied (path outside whitelist)");
     return { error: "Open denied by path policy", code: 403 as const, real: null as string | null };
   }
 
   return { error: null as string | null, code: 200 as const, real };
 }
 
-app.get("/runs/:runId/output-file", async (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+async function resolveOutputPathByRunId(runId: string) {
+  const run = runs.get(runId);
+  const fromRun = run?.artifacts?.docxPath ?? null;
+  if (fromRun) {
+    const resolved = await resolveWhitelistedOutputPathByPath(fromRun, run);
+    if (!resolved.error) return resolved;
+  }
+  const fallback = path.join(process.cwd(), "docs", "exports", `${runId}.docx`);
+  return resolveWhitelistedOutputPathByPath(fallback, run ?? undefined);
+}
 
-  const resolved = await resolveWhitelistedOutputPath(run);
+app.get("/runs/:runId/output-file", async (req, res) => {
+  const resolved = await resolveOutputPathByRunId(req.params.runId);
   if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
   return res.download(resolved.real, path.basename(resolved.real));
 });
 
 app.post("/runs/:runId/open-output", async (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
-
-  const resolved = await resolveWhitelistedOutputPath(run);
+  const resolved = await resolveOutputPathByRunId(req.params.runId);
   if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
 
   cpExec(`open "${resolved.real.replace(/"/g, '\\"')}"`, (err) => {

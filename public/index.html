@@ -274,12 +274,10 @@
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
       { id: 'deepseek:local', label: 'deepseek:local（本地）' },
-      { id: 'tavily-search:tool', label: 'tavily-search:tool（web search）' },
       { id: 'chatgpt-api:gpt-4o-mini', label: 'chatgpt-api:gpt-4o-mini（OpenAI API）' },
       { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini' },
       { id: 'anthropic:sonnet', label: 'anthropic:sonnet' },
       { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）' },
-      { id: 'none', label: 'none（空）' },
     ];
     const ROLE_RULES = {
       main: { multi: false, title: 'Main' },
@@ -291,11 +289,11 @@
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
     let mode = 'roles';
     let workflowStages = [
-      { id: 's1', type: 'research', agents: ['tavily-search:tool', 'deepseek:local', 'chatgpt-api:gpt-4o-mini'], mergePolicy: 'none', notes: 'sources>=10', roleId: 'researcher_1' },
+      { id: 's1', type: 'research', agents: ['deepseek:local', 'chatgpt-api:gpt-4o-mini'], mergePolicy: 'none', notes: 'sources>=10', roleId: 'researcher_1' },
       { id: 's2', type: 'plan', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'outline with thesis+3-5 sections', roleId: 'outliner' },
       { id: 's3', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'draft >=1500 words', roleId: 'drafter' },
       { id: 's4', type: 'review', agents: ['deepseek:local'], mergePolicy: 'summary', notes: 'revise + counterarguments + uncertainty', roleId: 'reviser' },
-      { id: 's5', type: 'execute', agents: ['none'], mergePolicy: 'none', notes: 'export docx docs/exports/<runId>.docx', roleId: 'exporter' },
+      { id: 's5', type: 'execute', agents: [], mergePolicy: 'none', notes: 'export docx docs/exports/<runId>.docx', roleId: 'exporter' },
       { id: 's6', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'docx+content QA', roleId: 'qa_judge' },
     ];
     let workflowRoles = [
@@ -390,15 +388,22 @@
 
     async function openRunOutput(runId) {
       const fileUrl = `${API}/runs/${runId}/output-file`;
-      const w = window.open(fileUrl, '_blank');
-      if (w) return { ok: true, mode: 'browser', url: fileUrl };
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
 
-      const res = await fetch(`${API}/runs/${runId}/open-output`, { method: 'POST' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-      return res.json();
+      // Best-effort fallback for environments that block tab opening.
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${API}/runs/${runId}/open-output`, { method: 'POST' });
+          if (!res.ok) return;
+        } catch {}
+      }, 300);
+      return { ok: true, mode: 'browser', url: fileUrl };
     }
 
     function statusClass(s) {
@@ -629,7 +634,7 @@
       ];
       const roleMap = { researcher_1: 'chatgpt-api:gpt-4o-mini', synthesizer: 'chatgpt-api:gpt-4o-mini', qa_judge: 'anthropic:sonnet', executor: 'none' };
       const stages = [
-        { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini','tavily-search:tool','deepseek:local'], mergePolicy: 'none', notes: 'collect evidence', roleId: 'researcher_1' },
+        { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini','deepseek:local'], mergePolicy: 'none', notes: 'collect evidence', roleId: 'researcher_1' },
         { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'merge and write', roleId: 'synthesizer' },
         { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'quality gate', roleId: 'qa_judge' },
       ];
@@ -657,7 +662,7 @@
         ];
         return {
           stages: [
-            { id:'s1', type:'research', agents:['tavily-search:tool','deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'parallel evidence collection', roleId:'researcher_a' },
+            { id:'s1', type:'research', agents:['deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'parallel evidence collection', roleId:'researcher_a' },
             { id:'s2', type:'research', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'counterarguments', roleId:'researcher_b' },
             { id:'s3', type:'synth', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'merge findings', roleId:'synthesizer' },
             { id:'s4', type:'qa', agents:['anthropic:sonnet'], mergePolicy:'judge', notes:'quality gate', roleId:'qa_judge' },
@@ -679,7 +684,7 @@
           stages: [
             { id:'s1', type:'research', agents:['deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'understand codebase', roleId:'code_research' },
             { id:'s2', type:'plan', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'produce plan', roleId:'planner' },
-            { id:'s3', type:'execute', agents:['none'], mergePolicy:'none', notes:'tool execution', roleId:'executor' },
+            { id:'s3', type:'execute', agents:[], mergePolicy:'none', notes:'tool execution', roleId:'executor' },
             { id:'s4', type:'qa', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'judge', notes:'verify', roleId:'qa_judge' },
           ],
           roles,
@@ -717,7 +722,7 @@
         return {
           stages: [
             { id:'s1', type:'plan', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'plan data task', roleId:'data_planner' },
-            { id:'s2', type:'execute', agents:['none'], mergePolicy:'none', notes:'run scripts', roleId:'data_executor' },
+            { id:'s2', type:'execute', agents:[], mergePolicy:'none', notes:'run scripts', roleId:'data_executor' },
             { id:'s3', type:'qa', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'judge', notes:'validate outputs', roleId:'qa_judge' },
           ],
           roles,
@@ -1132,7 +1137,6 @@
         preset = {
           goalHint: 'Increase source coverage and reduce brittle minSources',
           workflowTweaks: [
-            'Enable tavily-search:tool in research stage',
             'Add notes: sources diversification note (3+ domains)',
             'Adjust minSources from 12 to 10 when search budget is constrained'
           ],
