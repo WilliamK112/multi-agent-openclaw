@@ -74,6 +74,8 @@ type RunRecord = {
     repeat_flags?: boolean;
     repeat_details?: any;
     sources_count?: number;
+    sources_count_final?: number;
+    word_count?: number;
     unique_domains?: number;
     duplicate_ratio?: number;
     facts_count?: number;
@@ -306,6 +308,8 @@ async function appendRunIndexMeta(run: RunRecord) {
     gateReasons: Array.isArray(run.artifacts?.gateReasons) ? run.artifacts.gateReasons : [],
     anti_overfitting_applied: Boolean(run.config?.anti_overfitting_applied),
     sources_count: Number(run.artifacts?.sources_count ?? 0),
+    sources_count_final: Number((run.artifacts as any)?.sources_count_final ?? 0),
+    word_count: Number((run.artifacts as any)?.word_count ?? 0),
     unique_domains: Number(run.artifacts?.unique_domains ?? 0),
     duplicate_ratio: Number(run.artifacts?.duplicate_ratio ?? 0),
     facts_count: Number(run.artifacts?.facts_count ?? 0),
@@ -525,7 +529,7 @@ async function continueRun(runId: string) {
       if (g.overall_threshold === false) out.push("overall_v2 below required threshold");
       if (g.overall_improved_by_2 === false) out.push("overall_v2 not >= overall_v1 + 2");
       if (g.lowest_two_improved === false) out.push("weakest dimensions improvement below required");
-      if (g.sources_ok === false) out.push("minSources_not_met");
+      if (sourceCountFinal < 6 || g.sources_ok === false) out.push("minSources_not_met");
       if (g.words_ok === false) out.push("minWords_not_met");
       if (g.force_gate_fail === false) out.push("force_gate_fail");
       if (g.evidence_or_citations_improved === false) out.push("insufficient_evidence_or_citations_improvement");
@@ -574,6 +578,8 @@ async function continueRun(runId: string) {
       repeat_flags: repeat.repeat_flags,
       repeat_details: repeat.repeat_details,
       sources_count: urls.length,
+      sources_count_final: sourceCountFinal,
+      word_count: wordCount,
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       facts_count: factsCount,
@@ -770,6 +776,8 @@ app.get("/runs", (req, res) => {
       gateReasons: Array.isArray(r.artifacts?.gateReasons) ? r.artifacts.gateReasons.slice(0,2) : [],
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
       sources_count: r.artifacts?.sources_count ?? null,
+      sources_count_final: (r.artifacts as any)?.sources_count_final ?? null,
+      word_count: (r.artifacts as any)?.word_count ?? null,
       unique_domains: r.artifacts?.unique_domains ?? null,
       duplicate_ratio: r.artifacts?.duplicate_ratio ?? null,
       facts_count: r.artifacts?.facts_count ?? null,
