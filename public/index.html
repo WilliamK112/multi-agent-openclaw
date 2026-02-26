@@ -736,24 +736,36 @@
       recommendJsonPreviewEl.textContent = JSON.stringify({ stages: bundle.stages, roles: bundle.roles, roleAssignmentsByRole: bundle.roleAssignmentsByRole }, null, 2);
     }
 
-    function spark(values, gates) {
+    function spark(values) {
       const bars = '▁▂▃▄▅▆▇█';
       if (!values.length) return '—';
       const min = Math.min(...values), max = Math.max(...values);
-      return values.map((v, i) => {
+      return values.map((v) => {
         const idx = max === min ? 4 : Math.max(0, Math.min(7, Math.round(((v - min) / (max - min)) * 7)));
-        const ch = bars[idx];
-        return gates && gates[i] === false ? `<span style="color:#fca5a5">${ch}</span>` : ch;
+        return bars[idx];
       }).join('');
+    }
+
+    function gateSpark(gates) {
+      if (!gates.length) return '—';
+      return gates.map(g => g === true
+        ? '<span style="color:#86efac">■</span>'
+        : g === false
+          ? '<span style="color:#fca5a5">■</span>'
+          : '<span style="color:#a1a1aa">□</span>').join('');
     }
 
     function renderTrendPanel(runsWindow) {
       const filterText = trendFilter ? `${trendFilter.type}=${trendFilter.value}` : 'none';
       trendFilterEl.textContent = `Filter: ${filterText}`;
-      const gates = runsWindow.filter(r => r.gate !== null && r.gate !== undefined).map(r => !!r.gate);
-      const pass = gates.filter(Boolean).length;
-      const total = gates.length;
-      const scores = runsWindow.map(r => Number(r.v2_score)).filter(v => Number.isFinite(v));
+
+      const totalRuns = runsWindow.length;
+      const scoredRuns = runsWindow.filter(r => Number.isFinite(Number(r.v2_score)));
+      const scoredCount = scoredRuns.length;
+      const passAll = runsWindow.filter(r => r.gate === true).length;
+      const passScored = scoredRuns.filter(r => r.gate === true).length;
+
+      const scores = scoredRuns.map(r => Number(r.v2_score));
       const sorted = [...scores].sort((a,b)=>a-b);
       const mean = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length) : null;
       const median = scores.length ? (sorted[Math.floor((sorted.length-1)/2)] + sorted[Math.ceil((sorted.length-1)/2)]) / 2 : null;
@@ -763,18 +775,36 @@
       const dMean = (m1!=null && m2!=null) ? (m1-m2) : null;
       const best = scores.length ? Math.max(...scores) : null;
       const worst = scores.length ? Math.min(...scores) : null;
-      trendSummaryEl.innerHTML = `Pass Rate: <strong>${total?`${pass}/${total} (${Math.round(pass*100/total)}%)`:'—'}</strong> · Mean: <strong>${mean?.toFixed(2) ?? '—'}</strong> · Median: <strong>${median?.toFixed(2) ?? '—'}</strong> · Δmean(Recent10-Prev10): <strong>${dMean==null?'—':(dMean>=0?'+':'')+dMean.toFixed(2)}</strong> · Best/Worst: <strong>${best??'—'}/${worst??'—'}</strong>`;
+
+      trendSummaryEl.innerHTML = `TotalRunsInWindow: <strong>${totalRuns}</strong> · ScoredRunsCount: <strong>${scoredCount}</strong><br>` +
+        `PassRate(all): <strong>${totalRuns?`${passAll}/${totalRuns} (${Math.round(passAll*100/totalRuns)}%)`:'—'}</strong> · ` +
+        `PassRate(scored): <strong>${scoredCount?`${passScored}/${scoredCount} (${Math.round(passScored*100/scoredCount)}%)`:'—'}</strong><br>` +
+        `Mean: <strong>${mean?.toFixed(2) ?? '—'}</strong> · Median: <strong>${median?.toFixed(2) ?? '—'}</strong> · ` +
+        `Δmean(Recent10-Prev10): <strong>${dMean==null?'—':(dMean>=0?'+':'')+dMean.toFixed(2)}</strong> · ` +
+        `Best/Worst: <strong>${best??'—'}/${worst??'—'}</strong> <em>(based on ${scoredCount} scored runs)</em>`;
 
       const reasonCounts = {};
       runsWindow.forEach(r => (r.gateReasons||[]).forEach(x => reasonCounts[x] = (reasonCounts[x]||0)+1));
       const topReasons = Object.entries(reasonCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
-      trendReasonsEl.innerHTML = `Gate Failure Reasons Top3: ${topReasons.length ? topReasons.map(([k,v]) => `<button class="clear-btn" data-filter-reason="${escapeHtml(k)}">${escapeHtml(k)}: ${v} (${Math.round(v*100/Math.max(1,runsWindow.length))}%)</button>`).join(' ') : '—'}`;
+      trendReasonsEl.innerHTML = `Gate Failure Reasons Top3: ${topReasons.length ? topReasons.map(([k,v]) => `<button class="clear-btn" data-filter-reason="${escapeHtml(k)}">${escapeHtml(k)}: ${v} (${Math.round(v*100/Math.max(1,totalRuns))}%)</button>`).join(' ') : '—'}`;
 
       const dimCounts = {};
       runsWindow.forEach(r => { const d = r.top_delta?.dimension; if (d) dimCounts[d] = (dimCounts[d]||0)+1; });
       const topDims = Object.entries(dimCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
       trendDimensionsEl.innerHTML = `Improvement Focus Top3: ${topDims.length ? topDims.map(([k,v]) => `<button class="clear-btn" data-filter-dim="${escapeHtml(k)}">${escapeHtml(k)}: ${v}</button>`).join(' ') : '—'}`;
-      trendSparklineEl.innerHTML = `Score sparkline: ${spark(runsWindow.map(r=>Number(r.v2_score)).filter(v=>Number.isFinite(v)).slice(0,50), runsWindow.map(r=>r.gate).slice(0,50))}`;
+
+      const recent10Scored = scoredRuns.slice(0,10);
+      const focus = {};
+      recent10Scored.forEach(r => { const d = r.top_delta?.dimension; if (d) focus[d] = (focus[d]||0)+1; });
+      const focusTop = Object.entries(focus).sort((a,b)=>b[1]-a[1])[0];
+      const overfitWarn = focusTop && recent10Scored.length > 0 && (focusTop[1] / recent10Scored.length) >= 0.7;
+      const overfitText = overfitWarn
+        ? `<span style="color:#fcd34d;">Overfitting risk: top_delta mostly ${escapeHtml(String(focusTop[0]))}. Consider enforcing evidence/citations improvement.</span>`
+        : 'No overfitting signal';
+
+      trendSparklineEl.innerHTML = `Score sparkline (M=${scoredCount}): ${spark(scores.slice(0,50))}<br>` +
+        `Gate sparkline (N=${totalRuns}): ${gateSpark(runsWindow.map(r=>r.gate).slice(0,50))}<br>` +
+        `Overfitting check (last 10 scored runs): ${overfitText}`;
 
       trendReasonsEl.querySelectorAll('[data-filter-reason]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'gateReason',value:el.dataset.filterReason}; renderRuns(allRunsCache); }));
       trendDimensionsEl.querySelectorAll('[data-filter-dim]').forEach(el => el.addEventListener('click',()=>{ trendFilter={type:'topDelta',value:el.dataset.filterDim}; renderRuns(allRunsCache); }));
@@ -785,7 +815,7 @@
       let view = runs.slice(0, trendWindow);
       if (trendFilter?.type === 'gateReason') view = view.filter(r => (r.gateReasons||[]).includes(trendFilter.value));
       if (trendFilter?.type === 'topDelta') view = view.filter(r => (r.top_delta?.dimension || '') === trendFilter.value);
-      renderTrendPanel(runs.slice(0, trendWindow));
+      renderTrendPanel(view);
       if (!view.length) {
         runsList.innerHTML = '<div class="empty">No runs match current filter.</div>';
         return;
