@@ -389,6 +389,10 @@
     }
 
     async function openRunOutput(runId) {
+      const fileUrl = `${API}/runs/${runId}/output-file`;
+      const w = window.open(fileUrl, '_blank');
+      if (w) return { ok: true, mode: 'browser', url: fileUrl };
+
       const res = await fetch(`${API}/runs/${runId}/open-output`, { method: 'POST' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

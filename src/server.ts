@@ -742,15 +742,13 @@ app.post("/quality/export-csv", async (req, res) => {
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
 });
 
-app.post("/runs/:runId/open-output", async (req, res) => {
-  const run = runs.get(req.params.runId);
-  if (!run) return res.status(404).json({ error: "Run not found" });
+async function resolveWhitelistedOutputPath(run: RunRecord) {
   const target = run.artifacts?.docxPath;
-  if (!target) return res.status(400).json({ error: "No exported docx for this run" });
+  if (!target) return { error: "No exported docx for this run", code: 400 as const, real: null as string | null };
 
   const fsp = await import("node:fs/promises");
   const real = await fsp.realpath(target).catch(() => null);
-  if (!real) return res.status(404).json({ error: "File not found" });
+  if (!real) return { error: "File not found", code: 404 as const, real: null as string | null };
 
   const exportsRoot = path.resolve(process.cwd(), "docs/exports") + path.sep;
   const allowDesktop = String(process.env.ALLOW_OPEN_OUTPUT_DESKTOP ?? "false").toLowerCase() === "true";
@@ -759,12 +757,31 @@ app.post("/runs/:runId/open-output", async (req, res) => {
   const inDesktop = allowDesktop && real.startsWith(desktopRoot);
   if (!inExports && !inDesktop) {
     pushLog(run, "open_output: denied (path outside whitelist)");
-    return res.status(403).json({ error: "Open denied by path policy" });
+    return { error: "Open denied by path policy", code: 403 as const, real: null as string | null };
   }
 
-  cpExec(`open "${real.replace(/"/g, '\\"')}"`, (err) => {
+  return { error: null as string | null, code: 200 as const, real };
+}
+
+app.get("/runs/:runId/output-file", async (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+
+  const resolved = await resolveWhitelistedOutputPath(run);
+  if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
+  return res.download(resolved.real, path.basename(resolved.real));
+});
+
+app.post("/runs/:runId/open-output", async (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+
+  const resolved = await resolveWhitelistedOutputPath(run);
+  if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
+
+  cpExec(`open "${resolved.real.replace(/"/g, '\\"')}"`, (err) => {
     if (err) return res.status(500).json({ error: "Failed to open output" });
-    return res.json({ ok: true, path: real });
+    return res.json({ ok: true, path: resolved.real });
   });
 });
 
