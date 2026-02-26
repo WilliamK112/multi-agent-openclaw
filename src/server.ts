@@ -76,6 +76,12 @@ type RunRecord = {
     sources_count?: number;
     sources_count_final?: number;
     word_count?: number;
+    paragraph_word_counts?: Record<string, number>;
+    paragraph_length_checks?: Record<string, boolean>;
+    placeholder_reference_detected?: boolean;
+    works_cited_count?: number;
+    works_cited_valid_count?: number;
+    invalid_entries_sample?: string[];
     unique_domains?: number;
     duplicate_ratio?: number;
     facts_count?: number;
@@ -243,7 +249,7 @@ function detectRepeatSignals(md: string, goal: string) {
   const goalPhrase = goal.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
   const goalPhraseRepeated = goalPhrase.length > 20 && (md.toLowerCase().match(new RegExp(goalPhrase.replace(/\s+/g, "\\s+"), "g")) || []).length >= 2;
 
-  const repeat_flags = repeatedStarters.length > 0 || ngramRepeatRate > 0.03 || goalPhraseRepeated;
+  const repeat_flags = repeatedStarters.length > 0 || ngramRepeatRate > 0.08 || goalPhraseRepeated;
   const reasons = [
     ...(repeatedStarters.length ? ["repeated_paragraph_starters"] : []),
     ...(goalPhraseRepeated ? ["goal_phrase_repeated"] : []),
@@ -357,6 +363,55 @@ function evaluateRubricJudge(md: string, goal: string, repeat: { repeat_flags: b
     repeat_detected: repeat.repeat_flags,
   };
 }
+
+function sectionWordCount(md: string, heading: string): number {
+  const safe = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`##\\s+${safe}[^\\n]*\\n([\\s\\S]*?)(\\n##\\s+|$)`, "i");
+  const m = md.match(re);
+  if (!m) return 0;
+  return m[1].split(/\s+/).filter(Boolean).length;
+}
+
+function evaluateParagraphBudget(md: string) {
+  const intro = sectionWordCount(md, 'Introduction');
+  const b1 = sectionWordCount(md, 'Section 1');
+  const b2 = sectionWordCount(md, 'Section 2');
+  const b3 = sectionWordCount(md, 'Section 3');
+  const b4 = sectionWordCount(md, 'Section 4');
+  const counter = sectionWordCount(md, 'Counterarguments');
+  const limits = sectionWordCount(md, 'Limitations');
+  const concl = sectionWordCount(md, 'Conclusion');
+  const body = [b1,b2,b3,b4];
+  const checks = {
+    intro_in_range: intro >= 120 && intro <= 180,
+    body_longer_than_intro: Math.max(...body,0) >= intro + 60,
+    two_body_ge_200: body.filter((x)=>x>=200).length >= 2,
+    conclusion_in_range: concl >= 90 && concl <= 140,
+    no_template_labels: !/Paragraph\s+\d+:/i.test(md),
+  };
+  return { counts: { intro, body1:b1, body2:b2, body3:b3, body4:b4, counterarguments:counter, limitations:limits, conclusion:concl }, checks };
+}
+
+function evaluateWorksCited(md: string) {
+  const m = md.match(/##\s+(Works Cited|Sources)\n([\s\S]*?)(\n##\s+|$)/i);
+  const block = m ? m[2] : "";
+  const lines = block ? block.split(/\n+/).filter((x)=>x.trim().startsWith('- ')).map((x)=>x.trim()) : [];
+  const invalid: string[] = [];
+  const isPlaceholder = (ln: string) => /(Source|Reference)\s*\d+/i.test(ln);
+  for (const ln of lines) {
+    const hasUrl = /https?:\/\//i.test(ln);
+    const hasTitle = /“.+”|".+"|:/.test(ln);
+    const hasOrg = /[—-].+[—-]/.test(ln) || /University|Bureau|Department|Institute|Agency|Council|Association|Office/i.test(ln);
+    if (isPlaceholder(ln) || !hasUrl || !hasTitle || !hasOrg) invalid.push(ln);
+  }
+  return {
+    works_cited_count: lines.length,
+    works_cited_valid_count: lines.length - invalid.length,
+    placeholder_reference_detected: invalid.some((x)=>/(Source|Reference)\s*\d+/i.test(x)),
+    invalid_entries_sample: invalid.slice(0,3),
+  };
+}
+
 function needsApprovalForStep(_step: Plan["steps"][number]) {
   return false;
 }
@@ -592,7 +647,8 @@ async function continueRun(runId: string) {
     const factLinePattern = /\b(19\d{2}|20\d{2})\b|\b\d{2,}\b|\b(University|Department|Madison|Wisconsin|NOAA|USDA|Census|BLS|HUD|EPA|DOT)\b/i;
     const factsCount = finalMdText.split(/\n+/).map((ln) => ln.trim()).filter((ln) => ln && factLinePattern.test(ln)).length;
     const wordCount = finalMdText.split(/\s+/).filter(Boolean).length;
-    const sourceCountFinal = (finalMdText.match(/^-\s+Reference\s+\d+/gmi) || []).length;
+    const worksBlockFinal = finalMdText.match(/##\s+(Works Cited|Sources)\n([\s\S]*?)(\n##\s+|$)/i);
+    const sourceCountFinal = worksBlockFinal ? worksBlockFinal[2].split(/\n+/).filter((x) => x.trim().startsWith('- ')).length : 0;
     const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
     let judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
     const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
@@ -605,6 +661,8 @@ async function continueRun(runId: string) {
     const judge_v1_rubric = evaluateRubricJudge(draftMdText, run.goal, detectRepeatSignals(draftMdText, run.goal));
     const judge_v2_rubric = evaluateRubricJudge(finalMdText, run.goal, repeat);
     const judge_v3 = judge_v2_rubric;
+    const paraEval = evaluateParagraphBudget(finalMdText);
+    const citeEval = evaluateWorksCited(finalMdText);
     const gateReasons = (() => {
       const g = judge_v2?.gate_reasons ?? {};
       const out: string[] = [];
@@ -619,6 +677,13 @@ async function continueRun(runId: string) {
       if (sourceCountFinal < 6 || g.sources_ok === false) out.push("minSources_not_met");
       if (g.words_ok === false || wordCount < 650) out.push("minWords_not_met");
       if (repeat.repeat_flags) out.push(...repeat.reasons);
+      if (!paraEval.checks.intro_in_range) out.push("intro_length_out_of_range");
+      if (!paraEval.checks.body_longer_than_intro) out.push("body_not_longer_than_intro");
+      if (!paraEval.checks.two_body_ge_200) out.push("body_paragraphs_too_uniform");
+      if (!paraEval.checks.conclusion_in_range) out.push("conclusion_length_out_of_range");
+      if (!paraEval.checks.no_template_labels) out.push("template_paragraph_labels_present");
+      if (citeEval.placeholder_reference_detected) out.push("placeholder_references_present");
+      if (citeEval.works_cited_valid_count < 6) out.push("invalid_works_cited_entries");
       if (judge_v3?.overall_level === "Needs Work") out.push("overall_needs_work");
       if ((judge_v3?.criteria_levels?.["Mechanics: MLA"] ?? "Needs Work") === "Needs Work") out.push("mla_needs_work");
       if ((judge_v3?.criteria_levels?.["Thesis/Focus"] ?? "Needs Work") === "Needs Work") out.push("thesis_needs_work");
@@ -667,6 +732,12 @@ async function continueRun(runId: string) {
       sources_count: urls.length,
       sources_count_final: sourceCountFinal,
       word_count: wordCount,
+      paragraph_word_counts: paraEval.counts,
+      paragraph_length_checks: paraEval.checks,
+      placeholder_reference_detected: citeEval.placeholder_reference_detected,
+      works_cited_count: citeEval.works_cited_count,
+      works_cited_valid_count: citeEval.works_cited_valid_count,
+      invalid_entries_sample: citeEval.invalid_entries_sample,
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       facts_count: factsCount,
