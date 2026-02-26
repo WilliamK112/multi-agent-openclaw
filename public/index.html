@@ -809,7 +809,7 @@
       trendReasonsEl.innerHTML = `Gate Failure Reasons Top3: ${topReasons.length ? topReasons.map(([k,v]) => `<button class="clear-btn" data-filter-reason="${escapeHtml(k)}">${escapeHtml(k)}: ${v} (${Math.round(v*100/Math.max(1,totalRuns))}%)</button>`).join(' ') : '—'}`;
 
       const dimCounts = {};
-      runsWindow.forEach(r => { const d = r.top_delta?.dimension; if (d) dimCounts[d] = (dimCounts[d]||0)+1; });
+      runsWindow.forEach(r => { const d = (r.top_delta_effective?.dimension || r.top_delta_raw?.dimension || r.top_delta?.dimension); if (d) dimCounts[d] = (dimCounts[d]||0)+1; });
       const domainVals = runsWindow.map(r => Number(r.unique_domains)).filter(v => Number.isFinite(v) && v > 0);
       const avgDomains = domainVals.length ? (domainVals.reduce((a,b)=>a+b,0)/domainVals.length) : null;
       const topDims = Object.entries(dimCounts).sort((a,b)=>b[1]-a[1]).slice(0,3);
@@ -817,7 +817,7 @@
 
       const recent10Scored = scoredRuns.slice(0,10);
       const focus = {};
-      recent10Scored.forEach(r => { const d = r.top_delta?.dimension; if (d) focus[d] = (focus[d]||0)+1; });
+      recent10Scored.forEach(r => { const d = (r.top_delta_effective?.dimension || r.top_delta_raw?.dimension || r.top_delta?.dimension); if (d) focus[d] = (focus[d]||0)+1; });
       const focusTop = Object.entries(focus).sort((a,b)=>b[1]-a[1])[0];
       const overfitWarn = focusTop && recent10Scored.length > 0 && (focusTop[1] / recent10Scored.length) >= 0.7;
       const overfitText = overfitWarn
@@ -846,7 +846,7 @@
       allRunsCache = runs;
       let view = runs.slice(0, trendWindow);
       if (trendFilter?.type === 'gateReason') view = view.filter(r => (r.gateReasons||[]).includes(trendFilter.value));
-      if (trendFilter?.type === 'topDelta') view = view.filter(r => (r.top_delta?.dimension || '') === trendFilter.value);
+      if (trendFilter?.type === 'topDelta') view = view.filter(r => ((r.top_delta_effective?.dimension || r.top_delta_raw?.dimension || r.top_delta?.dimension) || '') === trendFilter.value);
       renderTrendPanel(view);
       if (!view.length) {
         runsList.innerHTML = '<div class="empty">No runs match current filter.</div>';
@@ -862,7 +862,7 @@
             </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${r.top_delta ? `${escapeHtml(String(r.top_delta.dimension))}:${escapeHtml(String(r.top_delta.delta))}` : '—'} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -918,6 +918,9 @@
       const gateReasons = run.artifacts?.gateReasons || [];
       const docxPath = run.artifacts?.docxPath || '';
       const docxExists = !!run.artifacts?.docxExists;
+      const tdRaw = run.artifacts?.top_delta_raw || run.top_delta_raw || run.top_delta || null;
+      const tdEff = run.artifacts?.top_delta_effective || run.top_delta_effective || tdRaw;
+      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}</p>`;
       if (j2?.must_fix_gate === false) {
         content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
       }
@@ -1165,7 +1168,7 @@
         revisionPolicy: [
           'Require v2 evidence_specificity or citations_integrity >= +2',
           'Require at least 3 distinct source domains/categories',
-          'Block export when only one dimension repeatedly dominates top_delta'
+          'Anti mode uses weighted delta; evidence/citations are emphasized.'
         ]
       };
       runEnforce = preset.enforce;

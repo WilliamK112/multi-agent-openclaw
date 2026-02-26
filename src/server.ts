@@ -734,9 +734,9 @@ app.post("/quality/export-csv", async (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const outPath = path.join(qualityDir, `quality_window_${windowN}_${ts}.csv`);
   const esc = (v: any) => `"${String(v ?? "").replaceAll('"','""')}"`;
-  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","top_delta_effective_dim","top_delta_effective_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
+  const header = ["runId","createdAt","gate","v2_score","top_delta_dim","top_delta_val","top_delta_raw_dim","top_delta_raw_val","top_delta_effective_dim","top_delta_effective_val","gateReasons_joined","anti_overfitting_applied","sources_count","unique_domains","duplicate_ratio"].join(",");
   const lines = rows.map((r: any) => [
-    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_effective?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_effective?.delta ?? r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
+    esc(r.id), esc(r.createdAt), esc(r.gate), esc(r.v2_score), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_raw?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_raw?.delta ?? r.top_delta?.delta ?? ""), esc(r.top_delta_effective?.dimension ?? r.top_delta?.dimension ?? ""), esc(r.top_delta_effective?.delta ?? r.top_delta?.delta ?? ""), esc((r.gateReasons||[]).join("|")), esc(r.anti_overfitting_applied ?? ""), esc(r.sources_count ?? ""), esc(r.unique_domains ?? ""), esc(r.duplicate_ratio ?? "")
   ].join(","));
   await fsp.writeFile(outPath, [header, ...lines].join("\n") + "\n", "utf8");
   return res.json({ ok: true, path: outPath, count: rows.length, dataSource });
