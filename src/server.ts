@@ -52,6 +52,9 @@ type RunRecord = {
     researchSummary?: string;
     docxPath?: string;
     exportMdPath?: string;
+    judge_v1?: any;
+    judge_v2?: any;
+    revision_report?: any;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -341,10 +344,17 @@ async function continueRun(runId: string) {
 
     const expectedDocx = path.join(process.cwd(), `docs/exports/${run.id}.docx`);
     const expectedMd = path.join(process.cwd(), `docs/exports/${run.id}.md`);
+    const fsp = await import("node:fs/promises");
+    const judge_v1 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`), "utf8").then(JSON.parse).catch(() => null);
+    const judge_v2 = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), "utf8").then(JSON.parse).catch(() => null);
+    const revision_report = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.revision_report.json`), "utf8").then(JSON.parse).catch(() => null);
     run.artifacts = {
       ...(run.artifacts ?? {}),
       docxPath: expectedDocx,
       exportMdPath: expectedMd,
+      judge_v1,
+      judge_v2,
+      revision_report,
     };
     pushLog(run, `export:docx_path=${expectedDocx}`);
     run.qa = await qa(process.cwd(), run.goal, run.id, run.config, run.artifacts);

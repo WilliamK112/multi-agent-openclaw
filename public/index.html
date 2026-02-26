@@ -120,6 +120,8 @@
     .run-status.needs_approval { background: #422006; color: #fcd34d; }
     .run-status.done { background: #14532d; color: #86efac; }
     .run-status.error { background: #450a0a; color: #fca5a5; }
+    .open-output-btn { margin-left:8px; font-size:.72rem; padding:3px 8px; border-radius:999px; border:1px solid #3f3f46; background:#1f2937; color:#e5e7eb; cursor:pointer; }
+    .open-output-btn:hover { background:#374151; }
     .run-meta { font-size: 0.85rem; color: #71717a; margin-top: 8px; }
     .detail-panel {
       margin-top: 24px;
@@ -338,6 +340,15 @@
       return res.json();
     }
 
+    async function openRunOutput(runId) {
+      const res = await fetch(`${API}/runs/${runId}/open-output`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
     function statusClass(s) {
       return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
     }
@@ -481,7 +492,7 @@
             </select>
             type:
             <select data-wtype="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
-              ${['research','synth','plan','execute','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
+              ${['research','synth','plan','execute','judge','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
             </select>
             role:
             <select data-wrole="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
@@ -706,13 +717,26 @@
         <div class="run-card ${r.id === selectedRunId ? 'selected' : ''}" data-id="${r.id}">
           <div class="run-header">
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
-            <span class="run-status ${statusClass(r.status)}">${r.status}</span>
+            <span>
+              <span class="run-status ${statusClass(r.status)}">${r.status}</span>
+              ${r.status === 'done' && r.docxPath ? `<button class="open-output-btn" data-open-output="${r.id}" title="${escapeHtml(r.docxPath)}">Open Output</button>` : ''}
+            </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
         el.addEventListener('click', () => selectRun(el.dataset.id));
+      });
+      runsList.querySelectorAll('[data-open-output]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try {
+            await openRunOutput(el.dataset.openOutput);
+          } catch (e) {
+            alert(e.message);
+          }
+        });
       });
     }
 
@@ -748,6 +772,26 @@
         content += `<p><strong>Workflow Stages:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(list || '(none)')}</pre>`;
       }
       if (run.artifacts) content += `<p><strong>Artifacts:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.artifacts, null, 2))}</pre>`;
+      const j1 = run.artifacts?.judge_v1;
+      const j2 = run.artifacts?.judge_v2;
+      const rr = run.artifacts?.revision_report;
+      if (j1 || j2) {
+        const dims = ['thesis_prompt','structure_coherence','evidence_specificity','counterarguments_nuance','clarity_style','citations_integrity'];
+        const rows = dims.map(k => {
+          const a = Number(j1?.dimension_scores?.[k]?.score ?? 0);
+          const b = Number(j2?.dimension_scores?.[k]?.score ?? 0);
+          const d = b - a;
+          return `${k}: v1=${a} | v2=${b} | Δ=${d>=0?'+':''}${d}`;
+        }).join('\n');
+        const weak = (j2?.weaknesses_top3 || j1?.weaknesses_top3 || []).join(', ');
+        const instr = (j2?.revision_instructions || j1?.revision_instructions || []).slice(0,8).map((x,i)=>`${i+1}. ${x}`).join('\n');
+        const gate = j2?.must_fix_gate;
+        const gateReasons = JSON.stringify(j2?.gate_reasons || {}, null, 2);
+        content += `<p><strong>Judge Results:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.83rem;">Judge v1 overall: ${escapeHtml(String(j1?.overall_score ?? 'N/A'))}\nJudge v2 overall: ${escapeHtml(String(j2?.overall_score ?? 'N/A'))}\n\nImprovement Summary\n${escapeHtml(rows)}\n\nWeaknesses Top3\n${escapeHtml(weak || '(none)')}\n\nRevision Instructions\n${escapeHtml(instr || '(none)')}\n\nGate status: ${escapeHtml(String(gate))}\nGate reasons: ${escapeHtml(gateReasons)}</pre>`;
+      }
+      if (rr) {
+        content += `<p><strong>Revision Report:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.83rem;">${escapeHtml(JSON.stringify(rr, null, 2))}</pre>`;
+      }
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
       detailContent.innerHTML = content;

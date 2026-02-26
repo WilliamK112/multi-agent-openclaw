@@ -117,8 +117,11 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     try {
       const j1 = JSON.parse(await fs.readFile(j1Path, "utf8"));
       const j2 = JSON.parse(await fs.readFile(j2Path, "utf8"));
-      checks["judge score improved or equal"] = Number(j2?.overall_score ?? 0) >= Number(j1?.overall_score ?? 0);
+      checks["judge overall improved by >=2"] = Number(j2?.overall_score ?? 0) >= Number(j1?.overall_score ?? 0) + 2;
       checks["judge gate passed"] = Boolean(j2?.must_fix_gate);
+      const lowest = Array.isArray(j1?.lowest_two_dimensions) ? j1.lowest_two_dimensions : [];
+      const deltas = lowest.map((k: string) => Number(j2?.dimension_scores?.[k]?.score ?? 0) - Number(j1?.dimension_scores?.[k]?.score ?? 0));
+      checks["lowest two dimensions improved rule"] = deltas.some((d: number)=>d>=2) || deltas.every((d: number)=>d>=1);
     } catch {
       checks["judge score improved or equal"] = false;
       checks["judge gate passed"] = false;
