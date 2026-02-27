@@ -26,13 +26,25 @@ export async function run(
   const provider = getProvider();
   const model = getModel(provider);
 
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (provider === "claude" && !key) {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const ollamaBase = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+  if (provider === "claude" && !anthropicKey) {
     throw new Error("Missing ANTHROPIC_API_KEY. Put it in .env");
+  }
+  if (provider === "openai" && !openaiKey) {
+    throw new Error("Missing OPENAI_API_KEY. Put it in .env");
+  }
+  if (provider === "deepseek" && !deepseekKey) {
+    throw new Error("Missing DEEPSEEK_API_KEY. Put it in .env");
   }
 
   log(`[Orchestrator] LLM provider=${provider}, model=${model}`);
-  log(`[Config] ANTHROPIC_API_KEY ${key ? "exists" : "missing"}`);
+  log(`[Config] ANTHROPIC_API_KEY ${anthropicKey ? "exists" : "missing"}`);
+  log(`[Config] OPENAI_API_KEY ${openaiKey ? "exists" : "missing"}`);
+  log(`[Config] DEEPSEEK_API_KEY ${deepseekKey ? "exists" : "missing"}`);
+  log(`[Config] OLLAMA_BASE_URL=${ollamaBase}`);
 
   hooks?.onLog?.("planner:start");
   const plan = await planner(goal, provider, model);

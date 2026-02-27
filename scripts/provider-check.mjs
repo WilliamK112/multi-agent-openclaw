@@ -20,4 +20,22 @@ if (provider === 'gemini') {
   process.exit(0);
 }
 
+if (provider === 'openai') {
+  if (!process.env.OPENAI_API_KEY) fail('Missing OPENAI_API_KEY in .env');
+  console.log('OpenAI config looks ready ✅');
+  process.exit(0);
+}
+
+if (provider === 'deepseek') {
+  if (!process.env.DEEPSEEK_API_KEY) fail('Missing DEEPSEEK_API_KEY in .env');
+  console.log('DeepSeek config looks ready ✅');
+  process.exit(0);
+}
+
+if (provider === 'ollama') {
+  const base = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  console.log(`Ollama config: base=${base} ✅`);
+  process.exit(0);
+}
+
 console.log('LLM_PROVIDER=fake (offline mode) ✅');

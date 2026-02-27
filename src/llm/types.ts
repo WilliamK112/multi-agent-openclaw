@@ -1,4 +1,4 @@
-export type LLMProvider = "fake" | "claude" | "gemini";
+export type LLMProvider = "fake" | "claude" | "gemini" | "openai" | "deepseek" | "ollama";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";

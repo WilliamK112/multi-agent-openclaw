@@ -53,6 +53,79 @@ async function callGemini(req: LLMRequest): Promise<LLMResponse> {
   return { text, provider: "gemini", model: req.model };
 }
 
+async function callOpenAI(req: LLMRequest): Promise<LLMResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+  const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: req.model,
+      messages,
+      max_tokens: 1200,
+      temperature: req.temperature ?? 0.2,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`OpenAI API error ${res.status}: ${await res.text()}`);
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content ?? "";
+  return { text, provider: "openai", model: req.model };
+}
+
+async function callDeepSeek(req: LLMRequest): Promise<LLMResponse> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error("Missing DEEPSEEK_API_KEY");
+
+  const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
+
+  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: req.model,
+      messages,
+      max_tokens: 1200,
+      temperature: req.temperature ?? 0.2,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`DeepSeek API error ${res.status}: ${await res.text()}`);
+  const data: any = await res.json();
+  const text = data?.choices?.[0]?.message?.content ?? "";
+  return { text, provider: "deepseek", model: req.model };
+}
+
+async function callOllama(req: LLMRequest): Promise<LLMResponse> {
+  const baseUrl = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
+  const messages = req.messages.map((m) => ({ role: m.role, content: m.content }));
+
+  const res = await fetch(`${baseUrl}/api/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: req.model,
+      messages,
+      stream: false,
+      options: { temperature: req.temperature ?? 0.2, num_predict: 1200 },
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Ollama API error ${res.status}: ${await res.text()}`);
+  const data: any = await res.json();
+  const text = data?.message?.content ?? "";
+  return { text, provider: "ollama", model: req.model };
+}
+
 function fakeResponse(req: LLMRequest): LLMResponse {
   const userGoal = req.messages.find((m) => m.role === "user")?.content ?? "unknown";
   const cleanGoal = userGoal.replace(/^Goal:\s*/i, "").split("\n")[0];
@@ -360,5 +433,8 @@ export async function generate(req: LLMRequest): Promise<LLMResponse> {
   if (req.provider === "fake") return fakeResponse(req);
   if (req.provider === "claude") return callClaude(req);
   if (req.provider === "gemini") return callGemini(req);
+  if (req.provider === "openai") return callOpenAI(req);
+  if (req.provider === "deepseek") return callDeepSeek(req);
+  if (req.provider === "ollama") return callOllama(req);
   throw new Error(`Unsupported provider: ${req.provider}`);
 }

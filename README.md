@@ -40,6 +40,9 @@ Set `.env`:
 - `LLM_PROVIDER=fake` (default)
 - `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY`
 - `LLM_PROVIDER=gemini` + `GEMINI_API_KEY`
+- `LLM_PROVIDER=openai` + `OPENAI_API_KEY`
+- `LLM_PROVIDER=deepseek` + `DEEPSEEK_API_KEY`
+- `LLM_PROVIDER=ollama` + `OLLAMA_BASE_URL` (default `http://localhost:11434`)
 
 Planner attempts selected provider, and falls back to safe fake JSON if provider/API fails.
 
@@ -96,7 +99,14 @@ marker=CURSOR_UI_EDIT_run_1772039938982_hpfbdi
 - Edited inside Cursor UI (not shell).
 - Protected by Approval/Resume for openclaw_act.
 - Next: run real tests and save output to docs/TEST_OUTPUT.txt.
+------
+## Cursor Automation Demo
+marker=CURSOR_UI_EDIT_run_1772045150508_rfhcrg
+- Edited inside Cursor UI (not shell).
+- Protected by Approval/Resume for openclaw_act.
+- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
 ---
+
 
 ---
 ## Cursor Automation Demo
