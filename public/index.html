@@ -14,8 +14,13 @@
       color: #e4e4e7;
       line-height: 1.5;
     }
-    .container { max-width: 900px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
+    .container { max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom: 14px; }
+    .subtitle { color:#98a2b8; font-size:.83rem; margin-top:4px; }
+    .status-badge { font-size:.72rem; border:1px solid #3e4558; color:#c6d0e6; background:#141924; border-radius:999px; padding:4px 10px; white-space:nowrap; }
+    .step { margin: 14px 0 8px; font-size:.76rem; letter-spacing:.06em; text-transform:uppercase; color:#8a94aa; }
+    .section-divider { border-top:1px solid #262c39; margin: 14px 0 10px; }
     .form-row {
       display: flex;
       gap: 12px;
@@ -127,6 +132,17 @@
     }
     .role-box.dragover { border-color: #7c82ff; background: #171b2a; box-shadow: 0 0 0 1px rgba(124,130,255,.35), 0 0 0 6px rgba(124,130,255,.08); }
     .role-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; font-size:0.82rem; }
+    .wf-card { margin-bottom:10px; border-color:#3a4154; }
+    .wf-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+    .wf-title { font-weight:600; color:#eaf0ff; }
+    .wf-sub { font-size:.68rem; color:#97a2bb; margin-top:2px; }
+    .wf-actions { display:flex; gap:4px; flex-wrap:wrap; }
+    .wf-controls { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-bottom:8px; }
+    .wf-field { font-size:.68rem; color:#96a0b7; display:flex; flex-direction:column; gap:3px; }
+    .wf-field select { background:#242733; color:#e8ecf6; border:1px solid #3b4255; border-radius:7px; padding:3px 6px; font-size:.74rem; }
+    .wstage-drop { min-height:52px; border:1px dashed #404861; border-radius:8px; padding:7px; background:#101420; }
+    .wstage-empty { color:#9aa4ba; font-size:.74rem; }
+    .wstage-empty small { display:block; font-size:.66rem; color:#7d879c; }
     .clear-btn { background:transparent; color:#aab2c4; border:1px solid #454b5d; border-radius:7px; padding:1px 7px; font-size:0.68rem; line-height:1.4; cursor:pointer; }
     .clear-btn:hover { color:#e2e8f5; border-color:#656f87; background:#1b1f2a; }
     .json-preview { font-family: ui-monospace, monospace; font-size: 0.70rem; background:#0c0d11; border:1px solid #262a33; padding:9px; border-radius:8px; white-space:pre-wrap; margin-top:10px; color:#99a3ba; }
@@ -190,23 +206,32 @@
 </head>
 <body>
   <div class="container">
-    <h1>multi-agent-openclaw</h1>
-    <div class="panel" style="margin-bottom:12px;">
-      <h3>Recent Changes (for visibility)</h3>
-      <div style="font-size:0.85rem;line-height:1.45;opacity:.95;">
+    <div class="topbar">
+      <div>
+        <h1>multi-agent-openclaw</h1>
+        <div class="subtitle">Design and run structured multi-agent research workflows locally.</div>
+      </div>
+      <div class="status-badge" id="system-status">System: checking…</div>
+    </div>
+
+    <details class="panel" style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Recent Changes</summary>
+      <div style="font-size:0.82rem;line-height:1.45;opacity:.92;margin-top:8px;">
         <div>• Added Workflow Builder mode (stages + agents + mergePolicy + JSON preview).</div>
         <div>• Added multi-agent Research/Synth/QA stage assignment support.</div>
         <div>• New English article: <code>docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md</code></div>
         <div>• Exported Word file: <code>/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx</code></div>
       </div>
-    </div>
+    </details>
+
+    <div class="step">Step 1 · Define Task</div>
     <div class="form-row">
-      <input type="text" id="goal" placeholder="Paper Mode Only: enter a research paper/report topic" />
-      <button class="btn-primary" id="submit">Run</button>
-      <span style="margin-left:8px;color:#fbbf24;font-size:.82rem;">Paper Mode Only</span>
+      <input type="text" id="goal" placeholder="Enter a research topic, policy question, or writing task" />
+      <button class="btn-primary" id="submit">Run Workflow</button>
+      <span style="margin-left:8px;color:#aab4c9;font-size:.8rem;">Research Essay Mode</span>
     </div>
     <div class="panel" style="margin-top:-8px;margin-bottom:12px;">
-      <h3>Prompt Clarifier (before run)</h3>
+      <h3>Task Clarity Check</h3>
       <div id="clarify-summary" style="font-size:.82rem;opacity:.9;margin-bottom:6px;">No clarification yet.</div>
       <div id="clarify-questions" style="font-size:.84rem;line-height:1.45;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
@@ -215,12 +240,17 @@
       </div>
     </div>
 
+    <div class="section-divider"></div>
+    <div class="step">Step 2 · Configure Workflow</div>
+
     <div class="panel" style="margin-bottom:12px;">
       <h3>Mode</h3>
-      <label style="margin-right:12px;"><input type="radio" name="mode" value="roles" checked /> Role Assignment</label>
-      <label><input type="radio" name="mode" value="workflow" /> Workflow Builder</label>
-      <button class="clear-btn" id="recommend-btn" style="margin-left:12px;">Recommend Workflow</button>
-      <span id="recommend-status" style="font-size:0.78rem;opacity:.8;margin-left:8px;"></span>
+      <div class="mode-switch" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label style="margin-right:2px;padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;"><input type="radio" name="mode" value="roles" checked /> Role Assignment</label>
+        <label style="padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;"><input type="radio" name="mode" value="workflow" /> Workflow Builder</label>
+        <button class="clear-btn" id="recommend-btn" style="margin-left:8px;">Recommend Workflow</button>
+        <span id="recommend-status" style="font-size:0.78rem;opacity:.85;margin-left:4px;"></span>
+      </div>
     </div>
 
     <div class="panel" id="recommend-panel" style="margin-bottom:12px;display:none;">
@@ -264,6 +294,8 @@
       </div>
       <div class="panel">
         <h3>Workflow Builder</h3>
+        <div style="font-size:.72rem;color:#8f97ab;margin-top:-4px;margin-bottom:8px;">Main orchestration canvas — configure stages, assign agents, and order execution.</div>
+        <div id="workflow-summary" style="font-size:.74rem;color:#b5c0d8;background:#131826;border:1px solid #2f3650;border-radius:8px;padding:6px 8px;margin-bottom:8px;"></div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
           <label style="font-size:0.8rem;opacity:.9;">New stage from role:</label>
           <select id="add-stage-template" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:6px;padding:4px 8px;">
@@ -278,14 +310,18 @@
         <div id="workflow-stages"></div>
         <h3 style="margin-top:10px;">Roles (editable)</h3>
         <div id="workflow-roles"></div>
+        <div style="margin-top:10px;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;color:#7f889f;">Workflow JSON (secondary)</div>
         <div class="json-preview" id="workflow-json-preview"></div>
       </div>
     </div>
 
+    <div class="section-divider"></div>
+    <div class="step">Step 3 · Run & Review</div>
+
     <div class="runs">
-      <div class="panel" style="margin-bottom:12px;">
-        <h3>Quality Trend Panel</h3>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <details class="panel" style="margin-bottom:12px;">
+        <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Quality Insights</summary>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 8px;">
           <label>Window:
             <select id="trend-window" style="margin-left:6px;background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:6px;padding:4px 8px;">
               <option value="20">Last 20</option>
@@ -300,17 +336,17 @@
         <div id="trend-reasons" style="margin-top:6px;font-size:.82rem;"></div>
         <div id="trend-dimensions" style="margin-top:6px;font-size:.82rem;"></div>
         <div id="trend-sparkline" style="margin-top:8px;font-family:ui-monospace,monospace;font-size:1rem;letter-spacing:1px;"></div>
-      </div>
-      <div class="panel" style="margin-bottom:12px;">
-        <h3>Action Panel</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      </details>
+      <details class="panel" style="margin-bottom:12px;">
+        <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Suggested Actions</summary>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button class="clear-btn" id="suggest-fix-btn">Suggest Fix for Top Failure</button>
           <button class="clear-btn" id="anti-overfit-btn" disabled>Anti-Overfitting Next Run</button>
           <button class="clear-btn" id="export-quality-csv-btn">Export Quality CSV</button>
         </div>
         <div id="action-hint" style="font-size:.82rem;opacity:.9;margin-top:8px;">No action generated yet.</div>
         <div class="json-preview" id="action-preset-preview"></div>
-      </div>
+      </details>
       <div id="runs-list"></div>
       <div id="detail-panel" class="detail-panel" style="display: none;">
         <h3>Run details</h3>
@@ -401,6 +437,7 @@
     const workflowBoardEl = document.getElementById('workflow-board');
     const workflowAgentsEl = document.getElementById('workflow-available-agents');
     const workflowStagesEl = document.getElementById('workflow-stages');
+    const workflowSummaryEl = document.getElementById('workflow-summary');
     const workflowJsonPreviewEl = document.getElementById('workflow-json-preview');
     const addStageBtn = document.getElementById('add-stage-btn');
     const addStageTemplateEl = document.getElementById('add-stage-template');
@@ -415,6 +452,7 @@
     const applyRecommendBtn = document.getElementById('apply-recommend-btn');
     const resetDefaultWorkflowBtn = document.getElementById('reset-default-workflow-btn');
     const recommendStatusEl = document.getElementById('recommend-status');
+    const systemStatusEl = document.getElementById('system-status');
 
     async function fetchRuns() {
       const res = await fetch(`${API}/runs?limit=50`);
@@ -677,30 +715,39 @@
 
     function renderWorkflowStages() {
       workflowStagesEl.innerHTML = workflowStages.map((s, i) => {
-        const chips = (s.agents || []).map(a => `<span class="agent-chip" style="cursor:default">${escapeHtml(a)} <button class="clear-btn" data-wremove-stage="${s.id}" data-wremove-agent="${escapeHtml(a)}" style="margin-left:6px;padding:1px 5px;">x</button></span>`).join('') || '<span style="opacity:.65">none</span>';
-        return `<div class="role-box" data-wstage-id="${s.id}" style="margin-bottom:8px;">
-          <div class="role-head"><span>${s.id} · ${s.type}</span><div>
+        const chips = (s.agents || []).map(a => `<span class="agent-chip" style="cursor:default;background:#202636;border-color:#384157;color:#dde4f5;">${escapeHtml(a)} <button class="clear-btn" data-wremove-stage="${s.id}" data-wremove-agent="${escapeHtml(a)}" style="margin-left:6px;padding:0 4px;">x</button></span>`).join('') || '<div class="wstage-empty">No agents assigned<small>Drag an agent here</small></div>';
+        return `<div class="role-box wf-card" data-wstage-id="${s.id}">
+          <div class="wf-header"><div><div class="wf-title">${s.id} · ${s.type.toUpperCase()}</div><div class="wf-sub">Stage ${i+1} of ${workflowStages.length}</div></div><div class="wf-actions">
             <button class="clear-btn" data-wup="${s.id}">↑</button>
             <button class="clear-btn" data-wdown="${s.id}">↓</button>
-            <button class="clear-btn" data-wclear="${s.id}">Clear Agents</button>
+            <button class="clear-btn" data-wclear="${s.id}">Clear</button>
             <button class="clear-btn" data-wremove="${s.id}">Remove</button>
           </div></div>
-          <div style="font-size:.78rem;opacity:.8;margin-bottom:6px;">mergePolicy:
-            <select data-wmerge="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
-              ${['none','summary','judge','vote'].map(m=>`<option value="${m}" ${m===s.mergePolicy?'selected':''}>${m}</option>`).join('')}
-            </select>
-            type:
-            <select data-wtype="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
-              ${['research','synth','plan','execute','judge','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
-            </select>
-            role:
-            <select data-wrole="${s.id}" style="background:#27272a;color:#fff;border:1px solid #3f3f46;border-radius:5px;">
-              ${workflowRoles.map(r=>`<option value="${r.id}" ${r.id===s.roleId?'selected':''}>${r.id}</option>`).join('')}
-            </select>
+          <div class="wf-controls">
+            <label class="wf-field">mergePolicy
+              <select data-wmerge="${s.id}">
+                ${['none','summary','judge','vote'].map(m=>`<option value="${m}" ${m===s.mergePolicy?'selected':''}>${m}</option>`).join('')}
+              </select>
+            </label>
+            <label class="wf-field">type
+              <select data-wtype="${s.id}">
+                ${['research','synth','plan','execute','judge','qa','review'].map(t=>`<option value="${t}" ${t===s.type?'selected':''}>${t}</option>`).join('')}
+              </select>
+            </label>
+            <label class="wf-field">role
+              <select data-wrole="${s.id}">
+                ${workflowRoles.map(r=>`<option value="${r.id}" ${r.id===s.roleId?'selected':''}>${r.id}</option>`).join('')}
+              </select>
+            </label>
           </div>
           <div class="wstage-drop">${chips}</div>
         </div>`;
       }).join('');
+
+      if (workflowSummaryEl) {
+        const assigned = workflowStages.reduce((n, s) => n + ((s.agents || []).length), 0);
+        workflowSummaryEl.textContent = `${workflowStages.length} stages · ${assigned} agent assignments · mode: workflow builder`;
+      }
 
       workflowStagesEl.querySelectorAll('[data-wmerge]').forEach(el=>el.addEventListener('change',()=>{
         const st=workflowStages.find(x=>x.id===el.dataset.wmerge); if(st) st.mergePolicy=el.value; renderWorkflowPreview();
@@ -1347,10 +1394,22 @@
         const res = await fetch(`${API}/runs?limit=1`);
         if (!res.ok) throw new Error(String(res.status));
         recommendBtn.disabled = false;
-        recommendStatusEl.textContent = 'OpenClaw active';
+        recommendStatusEl.textContent = 'Recommendation available';
+        if (systemStatusEl) {
+          systemStatusEl.textContent = 'System: Connected';
+          systemStatusEl.style.borderColor = '#2f6141';
+          systemStatusEl.style.background = '#13231a';
+          systemStatusEl.style.color = '#9ee6b1';
+        }
       } catch {
         recommendBtn.disabled = true;
-        recommendStatusEl.textContent = 'OpenClaw not detected, manual mode only';
+        recommendStatusEl.textContent = 'Recommendation offline';
+        if (systemStatusEl) {
+          systemStatusEl.textContent = 'System: Offline';
+          systemStatusEl.style.borderColor = '#5f3b3b';
+          systemStatusEl.style.background = '#221515';
+          systemStatusEl.style.color = '#f4b4b4';
+        }
       }
     }
 
