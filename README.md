@@ -1,59 +1,217 @@
 # multi-agent-openclaw
 
-Desktop-first dark-mode multi-agent orchestration app for research/paper workflows.
+A desktop-first dark-mode orchestration workspace for multi-agent research and writing workflows.
 
-## What it does
+multi-agent-openclaw helps you turn broad prompts into structured, inspectable execution pipelines.  
+It is designed for research/paper-style work where role specialization, workflow stages, and quality gates matter more than one-shot chat output.
 
-- Task composer + prompt clarity check
-- Role Assignment and Workflow Builder modes
-- Recommended workflow + meeting-room discussion
-- Multi-stage run pipeline: research → plan/synth/review/qa/execute
-- Final output open/reveal actions
-- Local web UI at `http://127.0.0.1:8787`
+## Screenshots
 
-## Run
+> Add real screenshots here.
+
+- Role Assignment  
+  `![Role Assignment](docs/screenshots/role-assignment.png)`
+
+- Workflow Builder  
+  `![Workflow Builder](docs/screenshots/workflow-builder.png)`
+
+- Recommendation + Meeting Room  
+  `![Recommendation + Meeting Room](docs/screenshots/recommendation-meeting-room.png)`
+
+- Results / Final Output  
+  `![Results](docs/screenshots/results.png)`
+
+## Why this project
+
+- Turn one-shot prompts into **structured execution pipelines**.
+- Keep control with **local-first run flow** and explicit output files.
+- Improve output quality with **prompt clarity checks + staged QA**.
+- Make agent behavior understandable through **role and stage separation**.
+- Support both quick execution and deeper configuration without forcing either.
+
+## Core Concepts
+
+### Agents
+Model/tool identities you can assign to responsibilities (research, synthesis, QA, etc.).
+
+### Role Assignment
+Maps agents to functional responsibilities (Main, Research, Executor, QA, Reviewer).
+
+### Workflow Builder
+Defines ordered stages (e.g., research → synth → review → execute → qa) and stage-level policies.
+
+### Prompt Clarifier
+Checks whether a task is specific enough before run; helps reduce vague output.
+
+### Recommendation Engine
+Suggests workflow structure + role mapping from task intent.
+
+### Execution Pipeline
+Runs the configured workflow through local API orchestration and stage handling.
+
+### Final Output Actions
+Open final result, reveal in Finder, and inspect run artifacts.
+
+## Architecture Overview
+
+multi-agent-openclaw is organized as a local orchestration stack: browser UI, local API, stage executor, provider layer, and file-based outputs.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Browser / Local UI                                          │
+│ Task Composer | Role Assignment | Workflow Builder          │
+│ Recommendation + Meeting Room | Results + Output Actions    │
+└───────────────────────────────┬─────────────────────────────┘
+                                │ HTTP
+                     ┌──────────▼──────────┐
+                     │ Local API Server    │
+                     │ /run /runs /workflow│
+                     └──────────┬──────────┘
+                                │
+                     ┌──────────▼──────────┐
+                     │ Orchestrator Layer  │
+                     │ role mapping        │
+                     │ stage execution     │
+                     │ merge policy        │
+                     └──────────┬──────────┘
+                                │
+        ┌───────────────────────┼────────────────────────┐
+        │                       │                        │
+┌───────▼────────┐    ┌─────────▼─────────┐    ┌────────▼────────┐
+│ OpenAI / APIs  │    │ Local Model Runtime│    │ Other Providers │
+└────────────────┘    └────────────────────┘    └─────────────────┘
+
+                     ┌────────────────────────────┐
+                     │ Local Artifacts / Exports  │
+                     │ docs/exports + run metadata│
+                     └────────────────────────────┘
+```
+
+Execution flow: user task → optional clarification/recommendation → configured run request → stage execution + quality checks → final output artifacts.
+
+## Project Structure
+
+```text
+multi-agent-openclaw/
+├─ public/                     # Browser assets (UI entry, avatars, static resources)
+│  └─ agent-avatars/           # Agent visual assets
+├─ src/                        # Local API + orchestration source
+│  ├─ server.ts                # Main server entry and endpoints
+│  └─ agents/                  # Planner/executor/QA modules
+├─ docs/                       # Documentation and local run outputs
+│  └─ exports/                 # Generated markdown/docx artifacts
+├─ scripts/                    # Utility scripts (if present)
+├─ test/                       # Test files (if present)
+├─ .env.example                # Environment template
+├─ package.json                # Scripts and dependencies
+├─ tsconfig.json               # TypeScript configuration
+└─ README.md                   # Project overview
+```
+
+- `public/`: user-facing UI and static files.
+- `src/`: orchestration + endpoint implementation.
+- `docs/exports/`: generated run artifacts for inspection.
+- `scripts/`: helper/dev automation.
+- `test/`: verification and regression checks.
+
+## Key Workflows
+
+1. **Clarify → Configure → Run → Review**
+   - Enter task
+   - Clarify prompt
+   - Assign roles / set stages
+   - Run pipeline
+   - Open final output and inspect quality
+
+2. **Recommend → Meeting Room → Apply → Execute**
+   - Generate recommended workflow
+   - Review discussion/explain-why
+   - Apply recommendation
+   - Run and evaluate output
+
+3. **UI or API-triggered runs**
+   - Trigger from UI
+   - Or call local API endpoints directly
+
+## Quick Start
 
 ```bash
 npm install
 npm run dev:server
 ```
 
-Then open:
+Open:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-## Key UI features
+## API
 
-- **Agent Library** with categorized, humanized avatar cards
-- **Role cards** with drag/drop assignment and improved empty states
-- **Workflow Builder** with stage ordering, merge policy, and role mapping
-- **Prompt Clarifier** to catch vague prompts before run
-- **Recommendation panel** with readable summary + meeting room transcript
-- **Results** with final output actions:
-  - Open Final Essay
-  - Show Final in Finder
+### `POST /run`
+Create a run.
 
-## Local API (optional)
-
-Create run:
-
-```bash
-curl -s -X POST http://127.0.0.1:8787/run \
-  -H "Content-Type: application/json" \
-  -d '{"goal":"Write a research essay on the relationship between China and US in 2026"}'
+```json
+{
+  "goal": "Write a research essay on the relationship between China and US in 2026",
+  "workflowStages": [],
+  "roles": [],
+  "roleAssignmentsByRole": {}
+}
 ```
 
-Recommend workflow:
+### `GET /runs?limit=50`
+List recent runs.
 
-```bash
-curl -s -X POST http://127.0.0.1:8787/workflow/recommend \
-  -H "Content-Type: application/json" \
-  -d '{"goal":"Write a research essay on the relationship between China and US in 2026"}'
-```
+### `GET /runs/:runId`
+Get run details, logs, and artifacts.
 
-## Notes
+### `POST /workflow/recommend`
+Get recommended workflow/roles for a goal.
 
-- This repo includes generated sample avatars in `public/agent-avatars/generated`.
-- Runtime outputs under `docs/exports` are local artifacts and can be excluded from commits.
+### `POST /runs/:runId/open-output`
+Open final output file.
+
+### `POST /runs/:runId/open-output-folder`
+Reveal output in Finder.
+
+## Configuration
+
+Configure model/provider keys via environment variables (see `.env.example`).  
+Keep secrets local and out of git history.
+
+## Current Scope
+
+### What it currently does
+- Role + stage workflow setup
+- Prompt clarity checks and recommendation flow
+- Local run execution and artifact output
+- Final output opening/reveal actions
+- UI support for iterative run-review cycles
+
+### What it does not yet fully do
+- Full production-grade durable state/recovery guarantees
+- Multi-user collaboration and hosted deployment layer
+- Advanced visual execution tracing across all stage internals
+
+## Roadmap
+
+- Richer run history and filtering
+- Shareable workflow templates
+- Agent persona/avatar identity packs
+- Multi-model comparison runs
+- Visual stage execution trace timeline
+- Export improvements (docx/pdf workflows)
+- Optional image/video-oriented workflow extensions
+
+## Contributing
+
+1. Fork and clone the repo
+2. Create a feature branch
+3. Make scoped changes with clear commits
+4. Open PR with:
+   - summary
+   - screenshots (if UI change)
+   - test/verification notes
+
+Issues and focused PRs are welcome.
