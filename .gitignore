@@ -1,3 +1,16 @@
 .env
 .env.*
 node_modules/
+
+# OS/editor
+.DS_Store
+*.log
+
+# Runtime outputs
+docs/exports/
+docs/quality/
+docs/runs_index.jsonl
+
+# Temp/local tool state
+.runner_requests/
+job_history.json

@@ -57,17 +57,19 @@
     .btn-success:hover { background: #16a34a; }
     .role-board {
       display: grid;
-      grid-template-columns: 1fr 2fr;
-      gap: 16px;
+      grid-template-columns: 0.95fr 2.05fr;
+      gap: 18px;
       margin-bottom: 24px;
+      align-items: start;
     }
     .panel {
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 8px;
-      padding: 12px;
+      background: linear-gradient(180deg, #18181b 0%, #15161a 100%);
+      border: 1px solid #2a2d36;
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
     }
-    .panel h3 { margin: 0 0 10px; font-size: 0.95rem; }
+    .panel h3 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; letter-spacing: .01em; color:#e7e9ee; }
     .agent-chip {
       display: inline-block;
       background: #27272a;
@@ -78,18 +80,56 @@
       font-size: 0.8rem;
       cursor: grab;
     }
+    .agent-tile {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      background: #171a22;
+      border: 1px solid #2f3748;
+      border-radius: 12px;
+      padding: 8px 11px;
+      margin: 6px 8px 0 0;
+      cursor: grab;
+      min-width: 218px;
+      transition: .16s ease;
+    }
+    .agent-tile:hover { border-color: #6b7a9d; background:#1c2332; transform: translateY(-1px); }
+    .agent-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      background: #2e3a58;
+      border: 1px solid #4f628e;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .agent-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .agent-meta { display:flex; flex-direction:column; line-height:1.15; }
+    .agent-name { font-size: .77rem; color:#d8e0f0; }
+    .agent-id { font-size: .70rem; color:#8f9ab2; }
     .roles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .role-box {
-      border: 1px dashed #3f3f46;
-      border-radius: 8px;
-      padding: 10px;
-      min-height: 86px;
-      background: #101013;
+      border: 1px dashed #3c4254;
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 98px;
+      background: linear-gradient(180deg, #101216 0%, #0f1013 100%);
+      transition: .16s ease;
     }
-    .role-box.dragover { border-color: #6366f1; background: #151524; }
-    .role-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.82rem; }
-    .clear-btn { background:#3f3f46; color:#fff; border:none; border-radius:6px; padding:2px 8px; font-size:0.72rem; cursor:pointer; }
-    .json-preview { font-family: ui-monospace, monospace; font-size: 0.75rem; background:#09090b; padding:10px; border-radius:6px; white-space:pre-wrap; margin-top:10px; }
+    .role-box.dragover { border-color: #7c82ff; background: #171b2a; box-shadow: 0 0 0 1px rgba(124,130,255,.35), 0 0 0 6px rgba(124,130,255,.08); }
+    .role-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; font-size:0.82rem; }
+    .clear-btn { background:transparent; color:#aab2c4; border:1px solid #454b5d; border-radius:7px; padding:1px 7px; font-size:0.68rem; line-height:1.4; cursor:pointer; }
+    .clear-btn:hover { color:#e2e8f5; border-color:#656f87; background:#1b1f2a; }
+    .json-preview { font-family: ui-monospace, monospace; font-size: 0.70rem; background:#0c0d11; border:1px solid #262a33; padding:9px; border-radius:8px; white-space:pre-wrap; margin-top:10px; color:#99a3ba; }
     .runs { margin-top: 32px; }
     .run-card {
       background: #18181b;
@@ -165,6 +205,15 @@
       <button class="btn-primary" id="submit">Run</button>
       <span style="margin-left:8px;color:#fbbf24;font-size:.82rem;">Paper Mode Only</span>
     </div>
+    <div class="panel" style="margin-top:-8px;margin-bottom:12px;">
+      <h3>Prompt Clarifier (before run)</h3>
+      <div id="clarify-summary" style="font-size:.82rem;opacity:.9;margin-bottom:6px;">No clarification yet.</div>
+      <div id="clarify-questions" style="font-size:.84rem;line-height:1.45;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="clear-btn" id="clarify-btn">Analyze Prompt Clarity</button>
+        <button class="clear-btn" id="apply-clarify-template-btn">Insert Detailed Prompt Template</button>
+      </div>
+    </div>
 
     <div class="panel" style="margin-bottom:12px;">
       <h3>Mode</h3>
@@ -182,17 +231,28 @@
         <button class="clear-btn" id="apply-recommend-btn">Apply Recommended Workflow</button>
         <button class="clear-btn" id="reset-default-workflow-btn">Reset to Default Workflow</button>
       </div>
+      <div id="recommend-readable" style="font-size:0.86rem;line-height:1.45;background:#0f1014;border:1px solid #2d3340;border-radius:8px;padding:10px;margin:8px 0;"></div>
       <div class="json-preview" id="recommend-json-preview"></div>
+      <h3 style="margin-top:10px;">Meeting Room (Agent Discussion)</h3>
+      <div class="json-preview" id="meeting-room-preview"></div>
     </div>
 
     <div class="role-board" id="role-board">
       <div class="panel">
-        <h3>Available Agents (drag)</h3>
+        <h3>Available Agents</h3>
+        <div style="font-size:.72rem;color:#8f97ab;margin-top:-4px;margin-bottom:8px;">Drag agents into role cards</div>
         <div id="available-agents"></div>
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <input id="new-agent-id" type="text" placeholder="new agent id (e.g. runway:gen4)" style="flex:1;min-width:220px;padding:6px 8px;border:1px solid #3f3f46;border-radius:6px;background:#0f0f13;color:#e4e4e7;" />
+          <input id="new-agent-cats" type="text" placeholder="categories comma-separated (reasoning,image)" style="flex:1;min-width:220px;padding:6px 8px;border:1px solid #3f3f46;border-radius:6px;background:#0f0f13;color:#e4e4e7;" />
+          <button class="clear-btn" id="add-agent-btn">Add Agent</button>
+        </div>
       </div>
       <div class="panel">
         <h3>Role Assignment</h3>
+        <div style="font-size:.72rem;color:#8f97ab;margin-top:-4px;margin-bottom:8px;">Assign one or more agents to each responsibility</div>
         <div class="roles-grid" id="roles-grid"></div>
+        <div style="margin-top:10px;font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;color:#7f889f;">Assignment JSON (secondary)</div>
         <div class="json-preview" id="role-json-preview"></div>
       </div>
     </div>
@@ -272,19 +332,21 @@
     let antiOverfittingApplied = false;
 
     const AGENTS = [
-      { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）' },
-      { id: 'deepseek:local', label: 'deepseek:local（本地）' },
-      { id: 'chatgpt-api:gpt-4o-mini', label: 'chatgpt-api:gpt-4o-mini（OpenAI API）' },
-      { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini' },
-      { id: 'anthropic:sonnet', label: 'anthropic:sonnet' },
-      { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）' },
+      { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）', categories: ['reasoning', 'coding'], avatar: '🦙', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Local Llama Engineer' },
+      { id: 'deepseek:local', label: 'deepseek:local（本地）', categories: ['reasoning', 'coding'], avatar: '🧠', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'DeepSeek Analyst' },
+      { id: 'chatgpt-api:gpt-4o-mini', label: 'chatgpt-api:gpt-4o-mini（OpenAI API）', categories: ['reasoning', 'coding', 'planning'], avatar: '🧑‍💼', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'GPT Strategist' },
+      { id: 'openai:gpt-4o-mini', label: 'openai:gpt-4o-mini', categories: ['reasoning', 'writing'], avatar: '✍️', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'GPT Writer' },
+      { id: 'anthropic:sonnet', label: 'anthropic:sonnet', categories: ['reasoning', 'qa', 'writing'], avatar: '🧑‍⚖️', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Sonnet QA Judge' },
+      { id: 'cursor_ui:tool', label: 'cursor_ui:tool（仅UI工具）', categories: ['ui_automation'], avatar: '🖱️', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Cursor UI Operator' },
+      { id: 'openai:gpt-image-1', label: 'openai:gpt-image-1', categories: ['image_production'], avatar: '🎨', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Image Creator' },
+      { id: 'runway:gen4', label: 'runway:gen4', categories: ['video_making', 'image_to_video'], avatar: '🎬', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Video Director' },
     ];
     const ROLE_RULES = {
-      main: { multi: false, title: 'Main' },
-      research: { multi: true, title: 'Research' },
-      executor: { multi: false, title: 'Executor' },
-      qa: { multi: true, title: 'QA' },
-      reviewer: { multi: true, title: 'Reviewer' },
+      main: { multi: false, title: 'Main', desc: 'Primary coordinator for run-level decisions' },
+      research: { multi: true, title: 'Research', desc: 'Collect evidence, sources, and factual support' },
+      executor: { multi: false, title: 'Executor', desc: 'Performs deterministic execution/tool actions' },
+      qa: { multi: true, title: 'QA', desc: 'Checks quality gates and acceptance criteria' },
+      reviewer: { multi: true, title: 'Reviewer', desc: 'Provides editorial and structural feedback' },
     };
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
     let mode = 'roles';
@@ -308,6 +370,13 @@
     let recommendedBundle = null;
 
     const goalInput = document.getElementById('goal');
+    const clarifySummaryEl = document.getElementById('clarify-summary');
+    const clarifyQuestionsEl = document.getElementById('clarify-questions');
+    const clarifyBtn = document.getElementById('clarify-btn');
+    const applyClarifyTemplateBtn = document.getElementById('apply-clarify-template-btn');
+    const newAgentIdEl = document.getElementById('new-agent-id');
+    const newAgentCatsEl = document.getElementById('new-agent-cats');
+    const addAgentBtn = document.getElementById('add-agent-btn');
     const submitBtn = document.getElementById('submit');
     const runsList = document.getElementById('runs-list');
     const detailPanel = document.getElementById('detail-panel');
@@ -341,6 +410,8 @@
     const recommendExplainEl = document.getElementById('recommend-explain');
     const recommendCostEl = document.getElementById('recommend-cost');
     const recommendJsonPreviewEl = document.getElementById('recommend-json-preview');
+    const recommendReadableEl = document.getElementById('recommend-readable');
+    const meetingRoomPreviewEl = document.getElementById('meeting-room-preview');
     const applyRecommendBtn = document.getElementById('apply-recommend-btn');
     const resetDefaultWorkflowBtn = document.getElementById('reset-default-workflow-btn');
     const recommendStatusEl = document.getElementById('recommend-status');
@@ -406,6 +477,15 @@
       return { ok: true, mode: 'browser', url: fileUrl };
     }
 
+    async function openRunOutputFolder(runId) {
+      const res = await fetch(`${API}/runs/${runId}/open-output-folder`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
     function statusClass(s) {
       return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
     }
@@ -424,9 +504,58 @@
       roleJsonPreviewEl.textContent = JSON.stringify(assignmentPayload(), null, 2);
     }
 
+    function groupedAgents() {
+      const groups = new Map();
+      for (const a of AGENTS) {
+        const cats = Array.isArray(a.categories) && a.categories.length ? a.categories : ['other'];
+        for (const c of cats) {
+          if (!groups.has(c)) groups.set(c, []);
+          groups.get(c).push(a);
+        }
+      }
+      return Array.from(groups.entries()).sort((x, y) => x[0].localeCompare(y[0]));
+    }
+
+    function categoryAvatarUrl(cat) {
+      const map = {
+        coding: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png',
+        image_production: '/agent-avatars/generated/002-a-consistent-set-of-8-flat-vector-profes.png',
+        image_to_video: '/agent-avatars/generated/003-a-consistent-set-of-8-flat-vector-profes.png',
+        planning: '/agent-avatars/generated/004-a-consistent-set-of-8-flat-vector-profes.png',
+        qa: '/agent-avatars/generated/005-a-consistent-set-of-8-flat-vector-profes.png',
+        reasoning: '/agent-avatars/generated/001-single-person-only-one-centered-head-and.png',
+        ui_automation: '/agent-avatars/generated/002-single-person-only-one-centered-head-and.png',
+        video_making: '/agent-avatars/generated/003-single-person-only-one-centered-head-and.png',
+        writing: '/agent-avatars/generated/004-single-person-only-one-centered-head-and.png',
+        other: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png',
+      };
+      return map[cat] || map.other;
+    }
+
+    function agentTileHtml(a, attr = 'data-agent-id', avatarOverride = '') {
+      const cats = (a.categories || []).join(', ');
+      const avatarUrl = avatarOverride || a.avatarUrl || '';
+      const avatarHtml = avatarUrl
+        ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(a.displayName || a.id)} avatar" />`
+        : `${a.avatar || '🤖'}`;
+      return `<span class="agent-tile" draggable="true" ${attr}="${a.id}" title="${a.label} [${cats}]">
+        <span class="agent-avatar">${avatarHtml}</span>
+        <span class="agent-meta">
+          <span class="agent-name">${escapeHtml(a.displayName || a.id)}</span>
+          <span class="agent-id">${escapeHtml(a.id)}</span>
+        </span>
+      </span>`;
+    }
+
     function renderAvailableAgents() {
-      availableAgentsEl.innerHTML = AGENTS.map(a => `<span class="agent-chip" draggable="true" data-agent-id="${a.id}" title="${a.label}">${a.id}</span>`).join('');
-      availableAgentsEl.querySelectorAll('.agent-chip').forEach(el => {
+      const groups = groupedAgents();
+      availableAgentsEl.innerHTML = groups.map(([cat, list]) => `
+        <div style="margin:10px 0 14px;padding-bottom:8px;border-bottom:1px solid #242936;">
+          <div style="font-size:0.68rem;color:#8b94aa;letter-spacing:.06em;margin-bottom:6px;text-transform:uppercase;">${escapeHtml(cat)}</div>
+          <div>${list.map(a => agentTileHtml(a, 'data-agent-id', categoryAvatarUrl(cat))).join('')}</div>
+        </div>
+      `).join('');
+      availableAgentsEl.querySelectorAll('.agent-tile').forEach(el => {
         el.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/plain', el.dataset.agentId);
         });
@@ -472,13 +601,20 @@
     function renderRoles() {
       rolesGridEl.innerHTML = Object.entries(ROLE_RULES).map(([key, meta]) => {
         const val = roleAssignments[key];
+        const emptyState = `<div style="display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:46px;color:#8f96aa;">
+          <div style="font-size:.78rem;color:#aab2c4;">No agent assigned</div>
+          <div style="font-size:.67rem;opacity:.85;">Drag an agent here</div>
+        </div>`;
         const chips = Array.isArray(val)
-          ? (val.length ? val.map(v => `<span class="agent-chip" style="cursor:default">${escapeHtml(v)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(v)}" class="clear-btn" style="margin-left:6px;padding:1px 5px;">x</button></span>`).join('') : '<span style="opacity:.65">none</span>')
-          : (val ? `<span class="agent-chip" style="cursor:default">${escapeHtml(val)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(val)}" class="clear-btn" style="margin-left:6px;padding:1px 5px;">x</button></span>` : '<span style="opacity:.65">none</span>');
+          ? (val.length ? val.map(v => `<span class="agent-chip" style="cursor:default;background:#202636;border-color:#384157;color:#dde4f5;">${escapeHtml(v)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(v)}" class="clear-btn" style="margin-left:6px;padding:0 4px;">x</button></span>`).join('') : emptyState)
+          : (val ? `<span class="agent-chip" style="cursor:default;background:#202636;border-color:#384157;color:#dde4f5;">${escapeHtml(val)} <button data-remove-role="${key}" data-remove-agent="${escapeHtml(val)}" class="clear-btn" style="margin-left:6px;padding:0 4px;">x</button></span>` : emptyState);
         return `
           <div class="role-box" data-role="${key}">
             <div class="role-head">
-              <span>${meta.title}</span>
+              <div>
+                <div style="font-weight:600;color:#e7ebf5;">${meta.title}</div>
+                <div style="font-size:.67rem;color:#8e97ab;margin-top:1px;">${meta.desc || ''}</div>
+              </div>
               <button class="clear-btn" data-clear-role="${key}">Clear</button>
             </div>
             <div>${chips}</div>
@@ -525,8 +661,14 @@
     }
 
     function renderWorkflowAgents() {
-      workflowAgentsEl.innerHTML = AGENTS.map(a => `<span class="agent-chip" draggable="true" data-wagent-id="${a.id}" title="${a.label}">${a.id}</span>`).join('');
-      workflowAgentsEl.querySelectorAll('.agent-chip').forEach(el => {
+      const groups = groupedAgents();
+      workflowAgentsEl.innerHTML = groups.map(([cat, list]) => `
+        <div style="margin:10px 0 14px;padding-bottom:8px;border-bottom:1px solid #242936;">
+          <div style="font-size:0.68rem;color:#8b94aa;letter-spacing:.06em;margin-bottom:6px;text-transform:uppercase;">${escapeHtml(cat)}</div>
+          <div>${list.map(a => agentTileHtml(a, 'data-wagent-id', categoryAvatarUrl(cat))).join('')}</div>
+        </div>
+      `).join('');
+      workflowAgentsEl.querySelectorAll('.agent-tile').forEach(el => {
         el.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/workflow-agent', el.dataset.wagentId);
         });
@@ -623,6 +765,57 @@
       mode = next;
       roleBoardEl.style.display = mode === 'roles' ? 'grid' : 'none';
       workflowBoardEl.style.display = mode === 'workflow' ? 'grid' : 'none';
+    }
+
+    function analyzePromptClarity(goal) {
+      const g = (goal || '').trim();
+      const lower = g.toLowerCase();
+      const questions = [];
+      const missing = [];
+
+      if (!g) {
+        return { score: 0, questions: ['What is the exact topic and desired output format?'], missing: ['topic'] };
+      }
+
+      if (!/(thesis|argue|position|main claim|claim)/.test(lower)) {
+        missing.push('thesis');
+        questions.push('What is your main thesis or position in one sentence?');
+      }
+      if (!/(2026|date range|period|timeframe|since|between)/.test(lower)) {
+        missing.push('timeframe');
+        questions.push('What exact time window should the essay focus on?');
+      }
+      if (!/(econom|trade|tech|security|diplomac|military|taiwan|supply chain|education|health)/.test(lower)) {
+        missing.push('scope');
+        questions.push('Which dimensions should be prioritized (trade, tech, security, diplomacy, etc.)?');
+      }
+      if (!/(source|citation|reference|peer-reviewed|official|government|think tank)/.test(lower)) {
+        missing.push('sources');
+        questions.push('What source policy do you want (e.g., only official/government/peer-reviewed)?');
+      }
+      if (!/(counterargument|counterpoint|limitations|uncertainty|bias)/.test(lower)) {
+        missing.push('counterarguments');
+        questions.push('How many counterarguments and uncertainty limitations should be included?');
+      }
+      if (!/(word|length|1500|2000|section|outline|format)/.test(lower)) {
+        missing.push('format');
+        questions.push('What target length and section structure do you want?');
+      }
+
+      const score = Math.max(0, 100 - missing.length * 15);
+      return { score, questions, missing };
+    }
+
+    function renderClarifier(goal) {
+      const c = analyzePromptClarity(goal);
+      clarifySummaryEl.textContent = `Clarity score: ${c.score}/100 · Missing: ${c.missing.length ? c.missing.join(', ') : 'none'}`;
+      clarifyQuestionsEl.innerHTML = c.questions.length
+        ? `<ol style="margin:0;padding-left:18px;">${c.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ol>`
+        : '<span style="color:#86efac;">Prompt looks sufficiently specific. You can run now.</span>';
+    }
+
+    function buildDetailedTemplate(goal) {
+      return `${goal}\n\nPlease follow these constraints:\n1) Thesis: [fill one-sentence argument]\n2) Scope: focus on trade, technology competition, and security/diplomacy in 2026\n3) Evidence: use at least 12 credible sources, including government/think-tank/economic datasets\n4) Structure: intro, 3 analytical sections, counterarguments, conclusion\n5) Quality: include at least 2 counterarguments and 3 uncertainty/limitation points\n6) Output: 1500-2000 words, with references section and inline evidence links`;
     }
 
     function defaultWorkflowBundle() {
@@ -761,8 +954,38 @@
       recommendedBundle = bundle;
       recommendPanelEl.style.display = 'block';
       recommendExplainEl.textContent = bundle.explainWhy || '';
-      recommendCostEl.textContent = `Estimated cost: ${bundle.costHint || 'medium'}`;
-      recommendJsonPreviewEl.textContent = JSON.stringify({ stages: bundle.stages, roles: bundle.roles, roleAssignmentsByRole: bundle.roleAssignmentsByRole }, null, 2);
+      recommendCostEl.textContent = `Estimated cost: ${bundle.costHint || 'medium'} · goalType=${bundle.goalType || 'unknown'}`;
+
+      const stages = Array.isArray(bundle.workflowStages) ? bundle.workflowStages : [];
+      const roles = Array.isArray(bundle.roles) ? bundle.roles : [];
+      const roleMap = bundle.roleAssignmentsByRole || {};
+
+      const stagesText = stages.length
+        ? stages.map((s, i) => {
+            const agents = (s.agents || []).length ? s.agents.join(', ') : 'none';
+            return `${i + 1}) ${s.id} · ${s.type.toUpperCase()}\n   Agents: ${agents}\n   Merge: ${s.mergePolicy}\n   Notes: ${s.notes || '-'}`;
+          }).join('\n\n')
+        : '(no stages)';
+
+      const roleText = roles.length
+        ? roles.map((r, i) => `${i + 1}) ${r.name} (${r.id})\n   Assigned agent: ${roleMap[r.id] || 'none'}\n   Prompt: ${r.prompt || '-'}`).join('\n\n')
+        : '(no roles)';
+
+      recommendReadableEl.textContent = [
+        'Workflow Summary',
+        '----------------',
+        stagesText,
+        '',
+        'Role Mapping',
+        '-----------',
+        roleText,
+      ].join('\n');
+
+      recommendJsonPreviewEl.textContent = JSON.stringify({ workflowStages: bundle.workflowStages, roles: bundle.roles, roleAssignmentsByRole: bundle.roleAssignmentsByRole }, null, 2);
+      const meeting = Array.isArray(bundle.meetingRoom) ? bundle.meetingRoom : [];
+      meetingRoomPreviewEl.textContent = meeting.length
+        ? meeting.map((m, i) => `${i + 1}. [${m.role}] ${m.speaker}: ${m.message}`).join('\n\n')
+        : '(no discussion)';
     }
 
     function spark(values) {
@@ -869,10 +1092,12 @@
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
             <span>
               <span class="run-status ${statusClass(r.status)}">${r.status}</span>
-              ${r.status === 'done' && r.docxPath ? `<button class="open-output-btn" data-open-output="${r.id}" title="${escapeHtml(r.docxPath)}">Open Output</button>` : ''}
+              ${r.status === 'done' && (r.docxPath || r.exportMdPath) ? `<button class="open-output-btn" data-open-output="${r.id}" title="${escapeHtml(r.docxPath || r.exportMdPath)}">Open Final Essay</button>` : ''}
+              ${r.status === 'done' ? `<button class="open-output-btn" data-open-output-folder="${r.id}" title="Reveal final essay file in Finder">Show Final in Finder</button>` : ''}
             </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
+          <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
           <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))}</div>
         </div>
       `).join('');
@@ -884,6 +1109,16 @@
           ev.stopPropagation();
           try {
             await openRunOutput(el.dataset.openOutput);
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
+      runsList.querySelectorAll('[data-open-output-folder]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try {
+            await openRunOutputFolder(el.dataset.openOutputFolder);
           } catch (e) {
             alert(e.message);
           }
@@ -1019,6 +1254,12 @@
         alert('Please enter a goal');
         return;
       }
+      const clarity = analyzePromptClarity(goal);
+      if (clarity.score < 55) {
+        renderClarifier(goal);
+        alert('Prompt is too vague for high-quality output. Please answer clarifier questions shown under the prompt first.');
+        return;
+      }
       try {
         submitBtn.disabled = true;
         const payloadRoles = assignmentPayload();
@@ -1049,6 +1290,14 @@
       if (e.key === 'Enter') submitBtn.click();
     });
 
+    goalInput.addEventListener('input', () => renderClarifier(goalInput.value));
+    clarifyBtn.addEventListener('click', () => renderClarifier(goalInput.value));
+    applyClarifyTemplateBtn.addEventListener('click', () => {
+      const base = goalInput.value.trim() || 'Write a research essay on the relationship between China and US in 2026';
+      goalInput.value = buildDetailedTemplate(base);
+      renderClarifier(goalInput.value);
+    });
+
     // Initial load
     renderAvailableAgents();
     renderRoles();
@@ -1061,6 +1310,29 @@
 
     document.querySelectorAll('input[name="mode"]').forEach(r => {
       r.addEventListener('change', () => switchMode(r.value));
+    });
+
+    addAgentBtn.addEventListener('click', () => {
+      const id = (newAgentIdEl.value || '').trim();
+      const catsRaw = (newAgentCatsEl.value || '').trim();
+      if (!id) {
+        recommendStatusEl.textContent = 'New agent id is required';
+        return;
+      }
+      if (AGENTS.some(a => a.id === id)) {
+        recommendStatusEl.textContent = `Agent already exists: ${id}`;
+        return;
+      }
+      const categories = catsRaw
+        ? catsRaw.split(',').map(x => x.trim()).filter(Boolean)
+        : ['other'];
+      AGENTS.push({ id, label: id, categories, avatar: '🤖', displayName: id.split(':').slice(-1)[0] || id });
+      newAgentIdEl.value = '';
+      newAgentCatsEl.value = '';
+      renderAvailableAgents();
+      renderWorkflowAgents();
+      renderWorkflowRoles();
+      recommendStatusEl.textContent = `Added agent ${id} in categories: ${categories.join(', ')}`;
     });
 
     addStageBtn.addEventListener('click', () => {
@@ -1082,20 +1354,32 @@
       }
     }
 
-    recommendBtn.addEventListener('click', () => {
+    recommendBtn.addEventListener('click', async () => {
       const goal = goalInput.value.trim();
       if (!goal) {
         recommendStatusEl.textContent = 'Enter goal first';
         return;
       }
-      const b = recommendBundle(goal);
-      renderRecommendation(b);
+      try {
+        recommendStatusEl.textContent = 'Analyzing goal in meeting room...';
+        const res = await fetch(`${API}/workflow/recommend`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal }),
+        });
+        const b = await res.json();
+        if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
+        renderRecommendation(b);
+        recommendStatusEl.textContent = 'Recommendation ready';
+      } catch (e) {
+        recommendStatusEl.textContent = `Recommend failed: ${e.message}`;
+      }
     });
 
     applyRecommendBtn.addEventListener('click', () => {
       if (!recommendedBundle) return;
-      workflowStages = recommendedBundle.stages.map(s => ({ ...s }));
-      workflowRoles = recommendedBundle.roles.map(r => ({ ...r }));
+      workflowStages = (recommendedBundle.workflowStages || []).map(s => ({ ...s }));
+      workflowRoles = (recommendedBundle.roles || []).map(r => ({ ...r }));
       roleAssignmentsByRole = { ...(recommendedBundle.roleAssignmentsByRole || {}) };
       renderWorkflowStages();
       renderWorkflowRoles();
@@ -1207,6 +1491,7 @@
     });
 
     detectOpenClawActive();
+    renderClarifier(goalInput.value);
 
     fetchRuns().then(runs => {
       renderRuns(runs);

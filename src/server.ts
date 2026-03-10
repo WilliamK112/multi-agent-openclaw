@@ -171,6 +171,101 @@ function normalizeWorkflowStages(input: any): WorkflowStage[] | undefined {
   return out;
 }
 
+type MeetingMessage = { speaker: string; role: string; message: string };
+
+type WorkflowRecommendation = {
+  goalType: string;
+  explainWhy: string;
+  costHint: "low" | "medium" | "high";
+  workflowStages: WorkflowStage[];
+  roles: RoleDef[];
+  roleAssignmentsByRole: Record<string, string>;
+  meetingRoom: MeetingMessage[];
+};
+
+function classifyGoalType(goal: string): "research_writing" | "code_change" | "ui_automation" | "data_task" | "misc" {
+  const g = goal.toLowerCase();
+  if (/(research|report|article|essay|policy|analysis|paper|workflow)/.test(g)) return "research_writing";
+  if (/(bug|fix|feature|refactor|code|implement|endpoint|api)/.test(g)) return "code_change";
+  if (/(ui|click|browser|automation|cursor)/.test(g)) return "ui_automation";
+  if (/(data|csv|table|batch|etl|dataset)/.test(g)) return "data_task";
+  return "misc";
+}
+
+function recommendWorkflow(goal: string): WorkflowRecommendation {
+  const goalType = classifyGoalType(goal);
+
+  const baseMeeting: MeetingMessage[] = [
+    { speaker: "Planner", role: "Orchestrator", message: `User goal received: ${goal}` },
+    { speaker: "Quality Lead", role: "QA", message: "Priority: maximize quality and reduce rework via explicit gates." },
+  ];
+
+  if (goalType === "research_writing") {
+    return {
+      goalType,
+      explainWhy: "Detected research/writing intent. Added explicit thesis planning + evidence audit to avoid generic outputs and improve final-essay quality.",
+      costHint: "high",
+      workflowStages: [
+        { id: "s1", type: "plan", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "extract thesis + scope + target structure" },
+        { id: "s2", type: "research", agents: ["deepseek:local", "chatgpt-api:gpt-4o-mini"], mergePolicy: "none", notes: "collect >=12 credible sources across policy/econ/security" },
+        { id: "s3", type: "synth", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "draft 1500-2000 words with 3 analytical sections" },
+        { id: "s4", type: "review", agents: ["anthropic:sonnet"], mergePolicy: "summary", notes: "strengthen counterarguments + uncertainty + references" },
+        { id: "s5", type: "execute", agents: [], mergePolicy: "none", notes: "export final md/docx artifacts" },
+        { id: "s6", type: "qa", agents: ["anthropic:sonnet"], mergePolicy: "judge", notes: "final gate: thesis/sources/wordcount/citations" },
+      ],
+      roles: [
+        { id: "thesis_planner", name: "Thesis Planner", prompt: "Extract a single clear thesis, define scope boundaries, and lock target structure before drafting." },
+        { id: "researcher", name: "Researcher", prompt: "Collect at least 12 high-credibility sources with links and source-type diversity; avoid generic filler." },
+        { id: "synthesizer", name: "Synthesizer", prompt: "Produce a concrete essay draft (1500-2000 words) with explicit evidence linkage per section." },
+        { id: "citation_editor", name: "Citation Editor", prompt: "Audit references for quality and relevance; remove weak citations and add missing source context." },
+        { id: "qa_judge", name: "QA Judge", prompt: "Score thesis clarity, evidence specificity, counterarguments, and citation integrity; return strict pass/fail with fixes." },
+      ],
+      roleAssignmentsByRole: {
+        thesis_planner: "chatgpt-api:gpt-4o-mini",
+        researcher: "deepseek:local",
+        synthesizer: "chatgpt-api:gpt-4o-mini",
+        citation_editor: "anthropic:sonnet",
+        qa_judge: "anthropic:sonnet",
+      },
+      meetingRoom: [
+        ...baseMeeting,
+        { speaker: "Thesis Planner", role: "Planning", message: "We should first pin down thesis and scope to avoid generic packs and off-target drafts." },
+        { speaker: "Researcher", role: "Research", message: "I will gather diversified, high-credibility sources with direct relevance to 2026 China-US dynamics." },
+        { speaker: "Synthesizer", role: "Writer", message: "I will produce a full-length analytical essay tied to the thesis and include explicit counterarguments." },
+        { speaker: "Citation Editor", role: "Evidence QA", message: "I will verify source quality and tighten references to reduce low-value citation noise." },
+        { speaker: "QA Judge", role: "Final QA", message: "I will enforce hard quality gates: wordcount, evidence specificity, and citation integrity." },
+      ],
+    };
+  }
+
+  return {
+    goalType,
+    explainWhy: "Using balanced default pipeline: plan → execute → QA for efficient and high-quality completion.",
+    costHint: "medium",
+    workflowStages: [
+      { id: "s1", type: "plan", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "create execution plan" },
+      { id: "s2", type: "execute", agents: [], mergePolicy: "none", notes: "run approved tools" },
+      { id: "s3", type: "qa", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "judge", notes: "verify quality and completeness" },
+    ],
+    roles: [
+      { id: "planner", name: "Planner", prompt: "Break goal into ordered, testable steps." },
+      { id: "executor", name: "Executor", prompt: "Execute steps with deterministic logs." },
+      { id: "qa_judge", name: "QA Judge", prompt: "Validate output quality and acceptance criteria." },
+    ],
+    roleAssignmentsByRole: {
+      planner: "chatgpt-api:gpt-4o-mini",
+      executor: "none",
+      qa_judge: "chatgpt-api:gpt-4o-mini",
+    },
+    meetingRoom: [
+      ...baseMeeting,
+      { speaker: "Planner", role: "Planning", message: "I suggest a simple 3-stage flow for speed and reliability." },
+      { speaker: "Executor", role: "Execution", message: "I will execute only approved deterministic steps." },
+      { speaker: "QA Judge", role: "QA", message: "I will enforce acceptance checks and return explicit failure reasons if needed." },
+    ],
+  };
+}
+
 function buildResearchOutputs(goal: string, researchAgents: string[]): { outputs: Array<{ agent: string; text: string }>; summary: string } {
   const outputs = researchAgents.map((agent, idx) => ({
     agent,
@@ -815,17 +910,15 @@ async function continueRun(runId: string) {
       }
     }
     const gatePassed = Boolean(judge_v2?.must_fix_gate) && gateReasons.length === 0;
-    let docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
+    const docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
     if (!gatePassed && docxExists) {
-      await fsp.unlink(expectedDocx).catch(() => undefined);
-      docxExists = false;
-      pushLog(run, "export:docx_removed_due_to_gate_fail");
+      pushLog(run, "export:docx_kept_even_when_gate_failed");
     }
     await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
     run.artifacts = {
       ...(run.artifacts ?? {}),
-      docxPath: gatePassed && docxExists ? expectedDocx : null,
-      docxExists: gatePassed && docxExists,
+      docxPath: docxExists ? expectedDocx : null,
+      docxExists,
       exportMdPath: expectedMd,
       judge_v1,
       judge_v2,
@@ -855,9 +948,9 @@ async function continueRun(runId: string) {
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       facts_count: factsCount,
-      exportStatus: gatePassed ? "exported" : "draft_only_not_exported",
+      exportStatus: docxExists ? (gatePassed ? "exported" : "exported_with_gate_fail") : "draft_only_not_exported",
     };
-    pushLog(run, gatePassed && docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
+    pushLog(run, docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
     run.qa = await qa(process.cwd(), run.goal, run.id, run.config, run.artifacts);
     pushLog(run, "qa:done");
     pushLog(run, JSON.stringify(run.qa));
@@ -872,6 +965,86 @@ async function continueRun(runId: string) {
   } finally {
     run.isProcessing = false;
   }
+}
+
+app.post('/workflow/recommend', (req, res) => {
+  const goal = String(req.body?.goal ?? '').trim();
+  if (!goal) return res.status(400).json({ error: 'Missing goal in body' });
+  const recommendation = recommendWorkflow(goal);
+  return res.json(recommendation);
+});
+
+function buildPaperPlanFromWorkflow(goal: string, stages?: WorkflowStage[]): Plan | null {
+  if (!Array.isArray(stages) || !stages.length) return null;
+
+  const steps: Plan['steps'] = [];
+  const addShell = (id: string, objective: string, command: string) => {
+    steps.push({ id, objective, tools: ['shell_run'], success_criteria: `${objective} done`, inputs: { command, topic: goal } });
+  };
+
+  let hasResearch = false;
+  let hasOutline = false;
+  let hasDraft = false;
+  let hasJudgeV1 = false;
+  let hasRevise = false;
+  let hasJudgeV2 = false;
+  let hasExport = false;
+
+  for (const st of stages) {
+    const sid = String(st.id || 'stage');
+    const t = String(st.type || '').toLowerCase();
+
+    if (t === 'research') {
+      addShell(`${sid}-research`, `Workflow stage ${sid}: research evidence`, '__PAPER_RESEARCH__');
+      hasResearch = true;
+    } else if (t === 'plan') {
+      addShell(`${sid}-outline`, `Workflow stage ${sid}: plan thesis/outline`, '__PAPER_OUTLINE__');
+      hasOutline = true;
+    } else if (t === 'synth') {
+      addShell(`${sid}-draft`, `Workflow stage ${sid}: synthesize draft`, '__PAPER_DRAFT__');
+      hasDraft = true;
+    } else if (t === 'review') {
+      if (!hasJudgeV1) {
+        addShell(`${sid}-judge-v1`, `Workflow stage ${sid}: baseline judge`, '__PAPER_JUDGE_V1__');
+        hasJudgeV1 = true;
+      }
+      addShell(`${sid}-revise`, `Workflow stage ${sid}: revise by judge feedback`, '__PAPER_REVISE_BY_JUDGE__');
+      hasRevise = true;
+    } else if (t === 'judge' || t === 'qa') {
+      if (!hasJudgeV1) {
+        addShell(`${sid}-judge-v1`, `Workflow stage ${sid}: baseline judge`, '__PAPER_JUDGE_V1__');
+        hasJudgeV1 = true;
+      }
+      if (!hasRevise) {
+        addShell(`${sid}-revise`, `Workflow stage ${sid}: revise by judge feedback`, '__PAPER_REVISE_BY_JUDGE__');
+        hasRevise = true;
+      }
+      addShell(`${sid}-judge-v2`, `Workflow stage ${sid}: final judge`, '__PAPER_JUDGE_V2__');
+      hasJudgeV2 = true;
+    } else if (t === 'execute') {
+      addShell(`${sid}-export`, `Workflow stage ${sid}: export docx`, '__PAPER_EXPORT_DOCX_DYNAMIC__');
+      hasExport = true;
+    }
+  }
+
+  // Minimal completion guarantees for paper workflow
+  if (!hasResearch) addShell('auto-research', 'Auto research evidence', '__PAPER_RESEARCH__');
+  if (!hasOutline) addShell('auto-outline', 'Auto generate outline', '__PAPER_OUTLINE__');
+  if (!hasDraft) addShell('auto-draft', 'Auto draft generation', '__PAPER_DRAFT__');
+  if (!hasJudgeV1) addShell('auto-judge-v1', 'Auto baseline judge', '__PAPER_JUDGE_V1__');
+  if (!hasRevise) addShell('auto-revise', 'Auto revise', '__PAPER_REVISE_BY_JUDGE__');
+  if (!hasJudgeV2) addShell('auto-judge-v2', 'Auto final judge', '__PAPER_JUDGE_V2__');
+  if (!hasExport) addShell('auto-export', 'Auto export docx', '__PAPER_EXPORT_DOCX_DYNAMIC__');
+
+  steps.push({
+    id: 'auto-qa-read',
+    objective: 'Read final markdown for QA artifact check',
+    tools: ['file_read'],
+    success_criteria: 'Final markdown readable',
+    inputs: { path: 'docs/exports/__RUN_ID__.md' },
+  });
+
+  return { goal, steps };
 }
 
 app.post("/run", (req, res) => {
@@ -967,11 +1140,19 @@ app.post("/run", (req, res) => {
       pushLog(run, `[Config] DEEPSEEK_API_KEY ${deepseekKey ? "exists" : "missing"}`);
       pushLog(run, `[Config] OLLAMA_BASE_URL=${ollamaBase}`);
 
-      run.plan = await planner(goal, provider, model);
+      const wfPlan = buildPaperPlanFromWorkflow(goal, run.config?.workflowStages);
+      if (wfPlan) {
+        run.plan = wfPlan;
+        pushLog(run, `workflow_plan_override: using ${wfPlan.steps.length} workflow-derived steps`);
+      } else {
+        run.plan = await planner(goal, provider, model);
+      }
+
       if (run.plan) {
         (run.plan as any).meta = {
           roleAssignments: run.config?.roleAssignments ?? null,
           workflowStages: run.config?.workflowStages ?? null,
+          source: wfPlan ? 'workflow_override' : 'planner_default',
         };
         for (const s of run.plan.steps) {
           if (!s.inputs) continue;
@@ -1052,6 +1233,7 @@ app.get("/runs", (req, res) => {
         count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
       },
       docxPath: r.artifacts?.docxPath ?? null,
+      exportMdPath: r.artifacts?.exportMdPath ?? null,
       v2_score: r.artifacts?.judge_v2?.overall_score ?? null,
       top_delta_raw: r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta),
       top_delta_effective: r.artifacts?.top_delta_effective ?? (r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta)),
@@ -1146,13 +1328,19 @@ async function resolveWhitelistedOutputPathByPath(target: string, runForLog?: Ru
 
 async function resolveOutputPathByRunId(runId: string) {
   const run = runs.get(runId);
-  const fromRun = run?.artifacts?.docxPath ?? null;
-  if (fromRun) {
-    const resolved = await resolveWhitelistedOutputPathByPath(fromRun, run);
+  const candidates = [
+    run?.artifacts?.docxPath ?? null,
+    run?.artifacts?.exportMdPath ?? null,
+    path.join(process.cwd(), "docs", "exports", `${runId}.docx`),
+    path.join(process.cwd(), "docs", "exports", `${runId}.md`),
+  ].filter(Boolean) as string[];
+
+  for (const p of candidates) {
+    const resolved = await resolveWhitelistedOutputPathByPath(p, run ?? undefined);
     if (!resolved.error) return resolved;
   }
-  const fallback = path.join(process.cwd(), "docs", "exports", `${runId}.docx`);
-  return resolveWhitelistedOutputPathByPath(fallback, run ?? undefined);
+
+  return { error: "Output not found", code: 404 as const, real: null as string | null };
 }
 
 app.get("/runs/:runId/output-file", async (req, res) => {
@@ -1167,6 +1355,17 @@ app.post("/runs/:runId/open-output", async (req, res) => {
 
   cpExec(`open "${resolved.real.replace(/"/g, '\\"')}"`, (err) => {
     if (err) return res.status(500).json({ error: "Failed to open output" });
+    return res.json({ ok: true, path: resolved.real });
+  });
+});
+
+app.post("/runs/:runId/open-output-folder", async (req, res) => {
+  const resolved = await resolveOutputPathByRunId(req.params.runId);
+  if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
+
+  // Reveal the exact output file in Finder instead of only opening parent folder
+  cpExec(`open -R "${resolved.real.replace(/"/g, '\\"')}"`, (err) => {
+    if (err) return res.status(500).json({ error: "Failed to reveal output in Finder" });
     return res.json({ ok: true, path: resolved.real });
   });
 });

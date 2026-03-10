@@ -1,129 +1,59 @@
 # multi-agent-openclaw
 
-A minimal runnable **multi-agent + multi-skills** CLI in Node.js + TypeScript.
+Desktop-first dark-mode multi-agent orchestration app for research/paper workflows.
 
-## Install
+## What it does
 
-```bash
-npm install
-cp .env.example .env
-```
+- Task composer + prompt clarity check
+- Role Assignment and Workflow Builder modes
+- Recommended workflow + meeting-room discussion
+- Multi-stage run pipeline: research → plan/synth/review/qa/execute
+- Final output open/reveal actions
+- Local web UI at `http://127.0.0.1:8787`
 
 ## Run
 
 ```bash
-npm run dev -- "你的goal"
-```
-
-If no goal argument is provided, the CLI will prompt interactively.
-
-## Agent Roles
-
-- **Planner**: Converts the goal into a structured JSON plan.
-- **Executor**: Executes each step and logs every skill call (input/output).
-- **QA**: Validates required artifacts and returns pass/fail + issues.
-
-## Skills
-
-- `shell_run`: executes allowlisted shell commands (`pwd`, `ls`, `cat`, `npm`, `node`, `echo`, `git`, `npx`, `tsc`).
-- `file_read`: reads files safely inside project root.
-- `file_write`: writes files safely inside project root.
-- `openclaw_act`:
-  - `openclaw: status`
-  - `openclaw: gateway status`
-  - other instructions run as safe stub log.
-
-## LLM Provider
-
-Set `.env`:
-
-- `LLM_PROVIDER=fake` (default)
-- `LLM_PROVIDER=claude` + `ANTHROPIC_API_KEY`
-- `LLM_PROVIDER=gemini` + `GEMINI_API_KEY`
-- `LLM_PROVIDER=openai` + `OPENAI_API_KEY`
-- `LLM_PROVIDER=deepseek` + `DEEPSEEK_API_KEY`
-- `LLM_PROVIDER=ollama` + `OLLAMA_BASE_URL` (default `http://localhost:11434`)
-
-Planner attempts selected provider, and falls back to safe fake JSON if provider/API fails.
-
-## Verify
-
-```bash
-npm run dev -- "Build a multi-agent system skeleton"
-```
-
-Expected output includes:
-- Planner JSON plan
-- Executor step-by-step skill logs
-- QA pass/fail summary
-
-## Local API
-
-Start server:
-
-```bash
+npm install
 npm run dev:server
 ```
 
-Default port: `8787` (override with `PORT`).
+Then open:
+
+```text
+http://127.0.0.1:8787
+```
+
+## Key UI features
+
+- **Agent Library** with categorized, humanized avatar cards
+- **Role cards** with drag/drop assignment and improved empty states
+- **Workflow Builder** with stage ordering, merge policy, and role mapping
+- **Prompt Clarifier** to catch vague prompts before run
+- **Recommendation panel** with readable summary + meeting room transcript
+- **Results** with final output actions:
+  - Open Final Essay
+  - Show Final in Finder
+
+## Local API (optional)
 
 Create run:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8787/run \
   -H "Content-Type: application/json" \
-  -d '{"goal":"Build a multi-agent skeleton and write README"}'
+  -d '{"goal":"Write a research essay on the relationship between China and US in 2026"}'
 ```
 
-Check run:
+Recommend workflow:
 
 ```bash
-curl -s http://127.0.0.1:8787/runs/RUN_ID_HERE
+curl -s -X POST http://127.0.0.1:8787/workflow/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Write a research essay on the relationship between China and US in 2026"}'
 ```
 
-## Cursor Automation Demo
-- This run was triggered from CodePilot GUI (/agent or /runs).
-- openclaw_act executes only after Approval/Resume.
-- Next step: run npm test and save output to docs/TEST_OUTPUT.txt (TODO)
+## Notes
 
----
-## Cursor Automation Demo
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
-- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
----
-
----
-## Cursor Automation Demo
-marker=CURSOR_UI_EDIT_run_1772039938982_hpfbdi
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
-- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
-------
-## Cursor Automation Demo
-marker=CURSOR_UI_EDIT_run_1772045150508_rfhcrg
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
-- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
----
-
-
----
-## Cursor Automation Demo
-marker=CURSOR_UI_EDIT_run_1772040490407_n3dp7l
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
----
----
-## Cursor Automation Demo
-marker=CURSOR_UI_EDIT_run_1772040567645_ctgpkf
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
----
-
----
-## Test Run Evidence
-marker=TEST_RUN_run_1772041422341_0tjfnn
-- Ran npm test via shell_run
-- Output saved to docs/TEST_OUTPUT.txt
----
+- This repo includes generated sample avatars in `public/agent-avatars/generated`.
+- Runtime outputs under `docs/exports` are local artifacts and can be excluded from commits.
