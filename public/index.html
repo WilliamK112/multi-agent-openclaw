@@ -46,6 +46,15 @@
     .status-badge { font-size:.72rem; border:1px solid #37507e; color:#d5e6ff; background:linear-gradient(180deg,#12233f 0%, #101d33 100%); border-radius:999px; padding:4px 10px; white-space:nowrap; box-shadow: var(--shadow); }
     .step { margin: 16px 0 10px; font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:#94acd7; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     .section-divider { border-top:1px solid var(--line); margin: 16px 0 12px; }
+    .chat-tabs { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0 14px; }
+    .chat-tab {
+      display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+      border:1px solid #39527e; border-radius:999px; background:#12213a; color:#d6e7ff;
+      font-size:.78rem; cursor:pointer;
+    }
+    .chat-tab.active { border-color:#7db1ff; box-shadow:0 0 0 1px rgba(125,177,255,.35); }
+    .chat-tab-close { border:none; background:transparent; color:#a9bddf; cursor:pointer; font-size:.86rem; line-height:1; padding:0; }
+    .chat-add { border:1px dashed #4f6da0; background:#101a2d; color:#c9dcff; border-radius:999px; padding:6px 10px; font-size:.82rem; cursor:pointer; }
     .form-row {
       display: flex;
       gap: 12px;
@@ -276,6 +285,7 @@
       </div>
       <div class="status-badge" id="system-status">System: checking…</div>
     </div>
+    <div class="chat-tabs" id="chat-tabs"></div>
 
     <details class="panel" style="margin-bottom:10px;">
       <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Recent Changes</summary>
@@ -430,6 +440,26 @@
     let runEnforce = null;
     let antiOverfittingApplied = false;
     const unsupportedFilterStateByRun = {};
+    const REVISION_BRIEF_STORAGE_KEY = 'oc_revision_brief_by_run_v1';
+    const revisionBriefByRun = (() => {
+      try { return JSON.parse(localStorage.getItem(REVISION_BRIEF_STORAGE_KEY) || '{}') || {}; } catch { return {}; }
+    })();
+    const persistRevisionBriefs = () => {
+      try { localStorage.setItem(REVISION_BRIEF_STORAGE_KEY, JSON.stringify(revisionBriefByRun)); } catch {}
+    };
+
+    const CHAT_TABS_STORAGE_KEY = 'oc_chat_tabs_v1';
+    const RUN_CHAT_MAP_STORAGE_KEY = 'oc_run_chat_map_v1';
+    let chatTabs = (() => {
+      try { return JSON.parse(localStorage.getItem(CHAT_TABS_STORAGE_KEY) || '[]'); } catch { return []; }
+    })();
+    if (!Array.isArray(chatTabs) || !chatTabs.length) chatTabs = [{ id: `chat_${Date.now()}`, name: 'Chat 1', goal: '' }];
+    let activeChatId = chatTabs[0].id;
+    const runChatMap = (() => {
+      try { return JSON.parse(localStorage.getItem(RUN_CHAT_MAP_STORAGE_KEY) || '{}') || {}; } catch { return {}; }
+    })();
+    const persistChats = () => { try { localStorage.setItem(CHAT_TABS_STORAGE_KEY, JSON.stringify(chatTabs)); } catch {} };
+    const persistRunChatMap = () => { try { localStorage.setItem(RUN_CHAT_MAP_STORAGE_KEY, JSON.stringify(runChatMap)); } catch {} };
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）', categories: ['reasoning', 'coding'], avatar: '🦙', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Local Llama Engineer' },
@@ -469,6 +499,7 @@
     let roleAssignmentsByRole = Object.fromEntries(workflowRoles.map(r => [r.id, 'none']));
     let recommendedBundle = null;
 
+    const chatTabsEl = document.getElementById('chat-tabs');
     const goalInput = document.getElementById('goal');
     const clarifySummaryEl = document.getElementById('clarify-summary');
     const clarifyQuestionsEl = document.getElementById('clarify-questions');
@@ -517,6 +548,52 @@
     const resetDefaultWorkflowBtn = document.getElementById('reset-default-workflow-btn');
     const recommendStatusEl = document.getElementById('recommend-status');
     const systemStatusEl = document.getElementById('system-status');
+
+    function getActiveChat() {
+      return chatTabs.find(c => c.id === activeChatId) || chatTabs[0];
+    }
+
+    function renderChatTabs() {
+      chatTabsEl.innerHTML = `${chatTabs.map(c => `<div class="chat-tab ${c.id===activeChatId?'active':''}" data-chat-id="${c.id}"><span>${escapeHtml(c.name)}</span>${chatTabs.length>1?`<button class="chat-tab-close" data-chat-close="${c.id}" title="Close chat">×</button>`:''}</div>`).join('')}<button class="chat-add" id="chat-add-btn">＋ Add Chat</button>`;
+      chatTabsEl.querySelectorAll('[data-chat-id]').forEach(el => {
+        el.addEventListener('click', (ev) => {
+          if (ev.target && ev.target.matches('[data-chat-close]')) return;
+          const current = getActiveChat();
+          if (current) current.goal = goalInput.value;
+          activeChatId = el.dataset.chatId;
+          goalInput.value = getActiveChat()?.goal || '';
+          persistChats();
+          renderChatTabs();
+          renderRuns(allRunsCache);
+        });
+      });
+      chatTabsEl.querySelectorAll('[data-chat-close]').forEach(el => {
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const id = el.dataset.chatClose;
+          if (chatTabs.length <= 1) return;
+          chatTabs = chatTabs.filter(c => c.id !== id);
+          if (activeChatId === id) activeChatId = chatTabs[0].id;
+          persistChats();
+          renderChatTabs();
+          goalInput.value = getActiveChat()?.goal || '';
+          renderRuns(allRunsCache);
+        });
+      });
+      const addBtn = document.getElementById('chat-add-btn');
+      if (addBtn) addBtn.addEventListener('click', () => {
+        const nextNum = chatTabs.length + 1;
+        const id = `chat_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+        const current = getActiveChat();
+        if (current) current.goal = goalInput.value;
+        chatTabs.push({ id, name: `Chat ${nextNum}`, goal: '' });
+        activeChatId = id;
+        goalInput.value = '';
+        persistChats();
+        renderChatTabs();
+        renderRuns(allRunsCache);
+      });
+    }
 
     async function fetchRuns() {
       const res = await fetch(`${API}/runs?limit=50`);
@@ -1211,7 +1288,7 @@ Hard constraints (do not echo these instructions in final output):
 
     function renderRuns(runs) {
       allRunsCache = runs;
-      let view = runs.slice(0, trendWindow);
+      let view = runs.filter(r => (runChatMap[r.id] || chatTabs[0]?.id) === activeChatId).slice(0, trendWindow);
       if (trendFilter?.type === 'gateReason') view = view.filter(r => (r.gateReasons||[]).includes(trendFilter.value));
       if (trendFilter?.type === 'topDelta') view = view.filter(r => ((r.top_delta_effective?.dimension || r.top_delta_raw?.dimension || r.top_delta?.dimension) || '') === trendFilter.value);
       renderTrendPanel(view);
@@ -1437,6 +1514,14 @@ Hard constraints (do not echo these instructions in final output):
           applyUnsupportedFilters();
         });
       });
+      const briefEl = detailContent.querySelector('[data-revision-brief]');
+      const storedBrief = String(revisionBriefByRun[run.id] || '').trim();
+      if (briefEl && storedBrief) {
+        briefEl.style.display = '';
+        briefEl.textContent = storedBrief;
+        briefEl.dataset.revisionBriefText = storedBrief;
+      }
+
       detailContent.querySelectorAll('[data-build-revision-brief]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const rows = Array.from(detailContent.querySelectorAll('tr[data-unsupported-row="1"]'));
@@ -1458,6 +1543,8 @@ Hard constraints (do not echo these instructions in final output):
             brief.textContent = text;
             brief.dataset.revisionBriefText = text;
           }
+          revisionBriefByRun[run.id] = text;
+          persistRevisionBriefs();
           if (navigator.clipboard?.writeText) {
             try { await navigator.clipboard.writeText(text); } catch {}
           }
@@ -1466,7 +1553,7 @@ Hard constraints (do not echo these instructions in final output):
       detailContent.querySelectorAll('[data-use-revision-brief]').forEach(btn => {
         btn.addEventListener('click', () => {
           const brief = detailContent.querySelector('[data-revision-brief]');
-          const text = String(brief?.dataset?.revisionBriefText || brief?.textContent || '').trim();
+          const text = String(brief?.dataset?.revisionBriefText || brief?.textContent || revisionBriefByRun[run.id] || '').trim();
           if (!text) {
             alert('Build revision brief first.');
             return;
@@ -1532,6 +1619,11 @@ Hard constraints (do not echo these instructions in final output):
             }
           : { roleAssignments: payloadRoles, enforce: runEnforce || undefined, anti_overfitting_applied: antiOverfittingApplied };
         const { runId } = await createRun(goal, payload);
+        runChatMap[runId] = activeChatId;
+        persistRunChatMap();
+        const active = getActiveChat();
+        if (active) active.goal = '';
+        persistChats();
         goalInput.value = '';
         selectedRunId = runId;
         antiOverfittingApplied = false;
@@ -1548,7 +1640,14 @@ Hard constraints (do not echo these instructions in final output):
       if (e.key === 'Enter') submitBtn.click();
     });
 
-    goalInput.addEventListener('input', () => renderClarifier(goalInput.value));
+    goalInput.addEventListener('input', () => {
+      const active = getActiveChat();
+      if (active) {
+        active.goal = goalInput.value;
+        persistChats();
+      }
+      renderClarifier(goalInput.value);
+    });
     clarifyBtn.addEventListener('click', () => renderClarifier(goalInput.value));
     applyClarifyTemplateBtn.addEventListener('click', () => {
       const base = goalInput.value.trim() || 'Write a research essay on the relationship between China and US in 2026';
@@ -1557,6 +1656,8 @@ Hard constraints (do not echo these instructions in final output):
     });
 
     // Initial load
+    renderChatTabs();
+    goalInput.value = getActiveChat()?.goal || '';
     renderAvailableAgents();
     renderRoles();
     renderRoleJsonPreview();
