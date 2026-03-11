@@ -102,3 +102,23 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: makes review state explicit so QA/revision loops are faster and less error-prone when triaging unsupported claims.
 - Self-check: yes, this directly improves workflow-first evidence inspection clarity during research-writing review.
 - Next immediate step: add quick row highlighting for highest missing-link claims to improve scan speed.
+
+## 2026-03-11 (heartbeat 06:48)
+
+- Added visual triage highlighting for unsupported-claim rows in run details (`public/index.html`):
+  - Rows with missing evidence links are now highlighted with a subtle risk background.
+  - `Missing` column values for highlighted rows are emphasized in warning color/bold.
+- Verification: `npm test` passed.
+- Why this matters: improves scan speed during QA/revision by making highest-risk evidence gaps visually obvious.
+- Self-check: yes, this directly strengthens workflow-first, evidence-backed review ergonomics.
+- Next immediate step: add a tiny legend (highlight meaning) near the unsupported-claim table controls.
+
+## 2026-03-11 (heartbeat 07:18)
+
+- Added a tiny inline legend beside unsupported-claim table controls (`public/index.html`):
+  - New chip label clarifies that highlighted rows indicate missing evidence links.
+  - Kept it compact and colocated with focus toggle/counter for immediate context.
+- Verification: `npm test` passed.
+- Why this matters: lowers interpretation friction during evidence QA, making review decisions faster and clearer in workflow-first demos.
+- Self-check: yes, this directly improves evidence inspectability UX for research/writing quality gates.
+- Next immediate step: add per-row quick action text (e.g., “needs source”) to make remediation intent explicit.
