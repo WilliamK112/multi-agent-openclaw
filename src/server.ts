@@ -7,6 +7,7 @@ import { getModel, getProvider } from "./config";
 import { planner, type Plan } from "./agents/planner";
 import { executor } from "./agents/executor";
 import { qa } from "./agents/qa";
+import { validateWorkflowEvidenceBundle, findUnsupportedClaims } from "./domain/workflow";
 
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
 
@@ -972,6 +973,29 @@ app.post('/workflow/recommend', (req, res) => {
   if (!goal) return res.status(400).json({ error: 'Missing goal in body' });
   const recommendation = recommendWorkflow(goal);
   return res.json(recommendation);
+});
+
+app.post('/quality/evidence/check', (req, res) => {
+  try {
+    const bundle = validateWorkflowEvidenceBundle(req.body ?? {});
+    const unsupportedClaims = findUnsupportedClaims(bundle);
+
+    return res.json({
+      ok: true,
+      runId: bundle.runId,
+      counts: {
+        sources: bundle.sources.length,
+        claims: bundle.claims.length,
+        links: bundle.links.length,
+        unsupportedClaims: unsupportedClaims.length,
+      },
+      unsupportedClaims,
+      pass: unsupportedClaims.length === 0,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(400).json({ ok: false, error: message });
+  }
 });
 
 function buildPaperPlanFromWorkflow(goal: string, stages?: WorkflowStage[]): Plan | null {
