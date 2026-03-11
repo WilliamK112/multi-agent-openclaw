@@ -61,3 +61,23 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: this makes claim-support auditability visible at review time (not hidden in raw artifacts), improving workflow-first inspectability for research/writing demos.
 - Self-check: yes, this directly improves evidence-backed quality gating visibility and reviewer trust.
 - Next immediate step: add a compact unsupported-claim breakdown table (claim text + missing link count) directly in the run details panel.
+
+## 2026-03-11 (heartbeat 04:48)
+
+- Added a compact unsupported-claim breakdown slice in run details:
+  - Server now stores `unsupported_claims_sample` (first 8 unsupported claims with id/text/section) in run artifacts (`src/server.ts`).
+  - UI run details now renders an **Unsupported Claim Breakdown (sample)** table with section + truncated claim text (`public/index.html`).
+- Verification: `npm test` passed.
+- Why this matters: reviewers can quickly inspect concrete unsupported claims in-context without opening raw JSON first, strengthening workflow-first evidence auditability.
+- Self-check: yes, this directly advances evidence-backed QA visibility for research/writing workflows.
+- Next immediate step: include per-claim missing-link counts in the sample table to prioritize remediation.
+
+## 2026-03-11 (heartbeat 05:18)
+
+- Added per-claim link diagnostics for unsupported-claim review:
+  - Server now enriches `unsupported_claims_sample` with `link_count` and `missing_link_count` based on evidence links per claim (`src/server.ts`).
+  - UI unsupported-claim table now includes **Links** and **Missing** columns for quick remediation prioritization (`public/index.html`).
+- Verification: `npm test` passed.
+- Why this matters: this makes QA gating more actionable by showing not only which claims are unsupported, but exactly how far each is from minimum evidence linkage.
+- Self-check: yes, this is a direct improvement to workflow-first, evidence-backed research/writing inspectability.
+- Next immediate step: add a one-click “focus unsupported claims” filter in run details to isolate weakest claims during revision.

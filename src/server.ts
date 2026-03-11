@@ -1022,6 +1022,16 @@ async function continueRun(runId: string) {
       facts_count: factsCount,
       evidenceBundlePath,
       unsupported_claims_count: unsupportedClaims.length,
+      unsupported_claims_sample: unsupportedClaims.slice(0, 8).map((c) => {
+        const linksForClaim = evidenceBundle.links.filter((l) => l.claimId === c.id);
+        return {
+          id: c.id,
+          text: c.text,
+          section: c.section,
+          link_count: linksForClaim.length,
+          missing_link_count: Math.max(1 - linksForClaim.length, 0),
+        };
+      }),
       exportStatus: docxExists ? (gatePassed ? "exported" : "exported_with_gate_fail") : "draft_only_not_exported",
     };
     pushLog(run, docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
