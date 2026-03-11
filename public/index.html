@@ -42,19 +42,47 @@
       text-shadow: 0 2px 24px rgba(110,168,254,.2);
     }
     .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom: 14px; }
+    .topbar-left { display:flex; flex-direction:column; align-items:stretch; gap:8px; min-width:0; flex:1; }
     .subtitle { color:var(--muted); font-size:.84rem; margin-top:6px; max-width: 68ch; }
     .status-badge { font-size:.72rem; border:1px solid #37507e; color:#d5e6ff; background:linear-gradient(180deg,#12233f 0%, #101d33 100%); border-radius:999px; padding:4px 10px; white-space:nowrap; box-shadow: var(--shadow); }
     .step { margin: 16px 0 10px; font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:#94acd7; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     .section-divider { border-top:1px solid var(--line); margin: 16px 0 12px; }
-    .chat-tabs { display:flex; gap:8px; flex-wrap:wrap; margin: 8px 0 14px; }
+    .chat-tabs-wrapper {
+      margin: 8px 0 14px;
+      border: 1px solid #2f4367;
+      border-radius: 12px;
+      background: rgba(10, 18, 32, 0.82);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      max-height: 220px;
+      overflow: visible;
+    }
+    .chat-tabs {
+      display:flex;
+      flex-direction:column;
+      flex-wrap:nowrap;
+      gap:8px;
+      min-height:0;
+      overflow-y:scroll;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-gutter: stable;
+      padding-right: 4px;
+    }
+    .chat-tabs::-webkit-scrollbar { width: 10px; }
+    .chat-tabs::-webkit-scrollbar-track { background: #0c162a; border-radius: 10px; }
+    .chat-tabs::-webkit-scrollbar-thumb { background: #324d77; border-radius: 10px; }
+    .chat-tabs::-webkit-scrollbar-thumb:hover { background: #406194; }
     .chat-tab {
-      display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+      display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px;
       border:1px solid #39527e; border-radius:999px; background:#12213a; color:#d6e7ff;
       font-size:.78rem; cursor:pointer;
     }
     .chat-tab.active { border-color:#7db1ff; box-shadow:0 0 0 1px rgba(125,177,255,.35); }
     .chat-tab-close { border:none; background:transparent; color:#a9bddf; cursor:pointer; font-size:.86rem; line-height:1; padding:0; }
-    .chat-add { border:1px dashed #4f6da0; background:#101a2d; color:#c9dcff; border-radius:999px; padding:6px 10px; font-size:.82rem; cursor:pointer; }
+    .chat-add { width:100%; border:1px dashed #4f6da0; background:#101a2d; color:#c9dcff; border-radius:999px; padding:6px 10px; font-size:.82rem; cursor:pointer; }
     .form-row {
       display: flex;
       gap: 12px;
@@ -264,6 +292,7 @@
       body { padding: 14px; }
       .container { max-width: 100%; }
       .topbar { flex-direction: column; align-items: flex-start; }
+      .topbar-left { width: 100%; }
       .runs { grid-template-columns: 1fr; gap: 10px; }
       .run-card { padding: 12px; border-radius: 12px; }
       .run-header { flex-direction: column; align-items: stretch; gap: 8px; }
@@ -279,13 +308,12 @@
 <body>
   <div class="container">
     <div class="topbar">
-      <div>
+      <div class="topbar-left">
         <h1>multi-agent-openclaw</h1>
         <div class="subtitle">Design and run structured multi-agent research workflows locally.</div>
       </div>
       <div class="status-badge" id="system-status">System: checking…</div>
     </div>
-    <div class="chat-tabs" id="chat-tabs"></div>
 
     <details class="panel" style="margin-bottom:10px;">
       <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Recent Changes</summary>
@@ -349,6 +377,10 @@
           <input id="new-agent-id" type="text" placeholder="new agent id (e.g. runway:gen4)" style="flex:1;min-width:220px;padding:6px 8px;border:1px solid #3f3f46;border-radius:6px;background:#0f0f13;color:#e4e4e7;" />
           <input id="new-agent-cats" type="text" placeholder="categories comma-separated (reasoning,image)" style="flex:1;min-width:220px;padding:6px 8px;border:1px solid #3f3f46;border-radius:6px;background:#0f0f13;color:#e4e4e7;" />
           <button class="clear-btn" id="add-agent-btn">Add Agent</button>
+        </div>
+        <div style="margin-top:12px;font-size:.72rem;color:#8f97ab;">Chats</div>
+        <div class="chat-tabs-wrapper" id="chat-tabs-wrapper" style="margin-top:6px;margin-bottom:0;max-height:180px;">
+          <div class="chat-tabs" id="chat-tabs"></div>
         </div>
       </div>
       <div class="panel">
@@ -440,10 +472,31 @@
     let runEnforce = null;
     let antiOverfittingApplied = false;
     const unsupportedFilterStateByRun = {};
-    const REVISION_BRIEF_STORAGE_KEY = 'oc_revision_brief_by_run_v1';
+    const REVISION_BRIEF_STORAGE_KEY = 'oc_revision_brief_by_run_v2';
+    const LEGACY_REVISION_BRIEF_STORAGE_KEY = 'oc_revision_brief_by_run_v1';
     const revisionBriefByRun = (() => {
-      try { return JSON.parse(localStorage.getItem(REVISION_BRIEF_STORAGE_KEY) || '{}') || {}; } catch { return {}; }
+      try {
+        const v2 = JSON.parse(localStorage.getItem(REVISION_BRIEF_STORAGE_KEY) || 'null');
+        if (v2 && typeof v2 === 'object') return v2;
+        const v1 = JSON.parse(localStorage.getItem(LEGACY_REVISION_BRIEF_STORAGE_KEY) || '{}') || {};
+        return v1;
+      } catch { return {}; }
     })();
+    const getRevisionBriefEntry = (runId) => {
+      const raw = revisionBriefByRun?.[runId];
+      if (!raw) return null;
+      if (typeof raw === 'string') return { text: raw, updatedAt: null };
+      if (typeof raw === 'object') return { text: String(raw.text || ''), updatedAt: Number(raw.updatedAt || 0) || null };
+      return null;
+    };
+    const formatBriefTs = (ts) => {
+      if (!ts) return '';
+      try {
+        return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return '';
+      }
+    };
     const persistRevisionBriefs = () => {
       try { localStorage.setItem(REVISION_BRIEF_STORAGE_KEY, JSON.stringify(revisionBriefByRun)); } catch {}
     };
@@ -555,6 +608,8 @@
 
     function renderChatTabs() {
       chatTabsEl.innerHTML = `${chatTabs.map(c => `<div class="chat-tab ${c.id===activeChatId?'active':''}" data-chat-id="${c.id}"><span>${escapeHtml(c.name)}</span>${chatTabs.length>1?`<button class="chat-tab-close" data-chat-close="${c.id}" title="Close chat">×</button>`:''}</div>`).join('')}<button class="chat-add" id="chat-add-btn">＋ Add Chat</button>`;
+      const activeTabEl = chatTabsEl.querySelector(`[data-chat-id="${activeChatId}"]`);
+      if (activeTabEl) activeTabEl.scrollIntoView({ block: 'nearest' });
       chatTabsEl.querySelectorAll('[data-chat-id]').forEach(el => {
         el.addEventListener('click', (ev) => {
           if (ev.target && ev.target.matches('[data-chat-close]')) return;
@@ -593,6 +648,25 @@
         renderChatTabs();
         renderRuns(allRunsCache);
       });
+
+      const tabsWrapperEl = document.getElementById('chat-tabs-wrapper');
+      if (tabsWrapperEl && chatTabsEl) {
+        const tabsStyle = window.getComputedStyle(chatTabsEl);
+        const wrapperStyle = window.getComputedStyle(tabsWrapperEl);
+        console.debug('[chat-tabs-debug]', {
+          selector: '#chat-tabs',
+          clientHeight: chatTabsEl.clientHeight,
+          scrollHeight: chatTabsEl.scrollHeight,
+          scrollTop: chatTabsEl.scrollTop,
+          overflowY: tabsStyle.overflowY,
+          parent: {
+            selector: '#chat-tabs-wrapper',
+            height: wrapperStyle.height,
+            minHeight: wrapperStyle.minHeight,
+            overflow: wrapperStyle.overflow,
+          },
+        });
+      }
     }
 
     async function fetchRuns() {
@@ -1392,7 +1466,7 @@ Hard constraints (do not echo these instructions in final output):
           const actionStyle = missing >= 1 ? 'color:#fda4af;font-weight:700;' : 'color:#86efac;';
           return `<tr data-unsupported-row="1" data-link-count="${escapeHtml(String(c.link_count ?? 0))}" data-missing-count="${escapeHtml(String(missing))}" style="${rowBg}"><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${idx + 1}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.section || 'draft'))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.text || '').slice(0, 180))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.link_count ?? 0))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;${missingColor}">${escapeHtml(String(missing))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;${actionStyle}">${actionText}</td></tr>`;
         }).join('');
-        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="clear-btn" data-focus-unsupported-toggle="off">Focus unsupported claims (0 links)</button><button class="clear-btn" data-action-needs-source-toggle="off">Show only needs source</button><button class="clear-btn" data-build-revision-brief>Build failed-claims revision brief</button><button class="clear-btn" data-use-revision-brief>Use brief as next run goal</button><button class="clear-btn" data-clear-revision-brief>Clear saved brief</button><span style="font-size:.74rem;color:#98a2b8;">Shows the weakest claims first.</span><span style="font-size:.74rem;color:#b7c1d6;" data-unsupported-counter>Showing ${sortedSample.length}/${sortedSample.length}</span><span style="font-size:.72rem;color:#fca5a5;border:1px solid #55363a;border-radius:999px;padding:2px 8px;background:rgba(127,29,29,0.18);">Legend: highlighted rows = missing evidence links</span></div><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Action</th></tr></thead><tbody>${rows}</tbody></table></div><pre data-revision-brief style="display:none;margin-top:8px;background:#0b0f16;border:1px solid #2a3447;padding:8px;border-radius:8px;white-space:pre-wrap;font-size:.75rem;"></pre></details>`;
+        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="clear-btn" data-focus-unsupported-toggle="off">Focus unsupported claims (0 links)</button><button class="clear-btn" data-action-needs-source-toggle="off">Show only needs source</button><button class="clear-btn" data-build-revision-brief>Build failed-claims revision brief</button><button class="clear-btn" data-use-revision-brief>Use brief as next run goal</button><button class="clear-btn" data-clear-revision-brief>Clear saved brief</button><span style="display:none;font-size:.72rem;color:#93c5fd;border:1px solid #1e3a8a;border-radius:999px;padding:2px 8px;background:rgba(30,58,138,0.2);" data-brief-status></span><span style="font-size:.74rem;color:#98a2b8;">Shows the weakest claims first.</span><span style="font-size:.74rem;color:#b7c1d6;" data-unsupported-counter>Showing ${sortedSample.length}/${sortedSample.length}</span><span style="font-size:.72rem;color:#fca5a5;border:1px solid #55363a;border-radius:999px;padding:2px 8px;background:rgba(127,29,29,0.18);">Legend: highlighted rows = missing evidence links</span></div><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Action</th></tr></thead><tbody>${rows}</tbody></table></div><pre data-revision-brief style="display:none;margin-top:8px;background:#0b0f16;border:1px solid #2a3447;padding:8px;border-radius:8px;white-space:pre-wrap;font-size:.75rem;"></pre></details>`;
       }
       if (j2?.must_fix_gate === false) {
         content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
@@ -1515,11 +1589,18 @@ Hard constraints (do not echo these instructions in final output):
         });
       });
       const briefEl = detailContent.querySelector('[data-revision-brief]');
-      const storedBrief = String(revisionBriefByRun[run.id] || '').trim();
+      const briefStatusEl = detailContent.querySelector('[data-brief-status]');
+      const storedEntry = getRevisionBriefEntry(run.id);
+      const storedBrief = String(storedEntry?.text || '').trim();
       if (briefEl && storedBrief) {
         briefEl.style.display = '';
         briefEl.textContent = storedBrief;
         briefEl.dataset.revisionBriefText = storedBrief;
+        if (briefStatusEl) {
+          const ts = formatBriefTs(storedEntry?.updatedAt);
+          briefStatusEl.style.display = '';
+          briefStatusEl.textContent = ts ? `Saved brief loaded (${ts})` : 'Saved brief loaded';
+        }
       }
 
       detailContent.querySelectorAll('[data-build-revision-brief]').forEach(btn => {
@@ -1543,8 +1624,13 @@ Hard constraints (do not echo these instructions in final output):
             brief.textContent = text;
             brief.dataset.revisionBriefText = text;
           }
-          revisionBriefByRun[run.id] = text;
+          const nowTs = Date.now();
+          revisionBriefByRun[run.id] = { text, updatedAt: nowTs };
           persistRevisionBriefs();
+          if (briefStatusEl) {
+            briefStatusEl.style.display = '';
+            briefStatusEl.textContent = `Brief generated (${formatBriefTs(nowTs)})`;
+          }
           if (navigator.clipboard?.writeText) {
             try { await navigator.clipboard.writeText(text); } catch {}
           }
@@ -1553,7 +1639,7 @@ Hard constraints (do not echo these instructions in final output):
       detailContent.querySelectorAll('[data-use-revision-brief]').forEach(btn => {
         btn.addEventListener('click', () => {
           const brief = detailContent.querySelector('[data-revision-brief]');
-          const text = String(brief?.dataset?.revisionBriefText || brief?.textContent || revisionBriefByRun[run.id] || '').trim();
+          const text = String(brief?.dataset?.revisionBriefText || brief?.textContent || getRevisionBriefEntry(run.id)?.text || '').trim();
           if (!text) {
             alert('Build revision brief first.');
             return;
@@ -1572,6 +1658,10 @@ Hard constraints (do not echo these instructions in final output):
             brief.textContent = '';
             brief.dataset.revisionBriefText = '';
             brief.style.display = 'none';
+          }
+          if (briefStatusEl) {
+            briefStatusEl.textContent = '';
+            briefStatusEl.style.display = 'none';
           }
         });
       });

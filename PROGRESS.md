@@ -227,3 +227,26 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: keeps QA-to-revision state durable when needed, while allowing reviewers to intentionally reset stale guidance during iterative research/writing loops.
 - Self-check: yes, this improves workflow-first evidence QA hygiene (explicit state control per run) without expanding scope.
 - Next immediate step: add a small “saved brief loaded” status chip so reviewers can tell when detail panel content came from persisted localStorage vs fresh generation.
+
+## 2026-03-11 (heartbeat 11:42)
+
+- Added persisted-brief status chip in run details (`public/index.html`):
+  - New inline chip (`data-brief-status`) in Unsupported Claim Breakdown controls.
+  - Shows **Saved brief loaded** when a brief is restored from localStorage for the selected run.
+  - Updates to **Brief generated** after creating a fresh revision brief; hides on **Clear saved brief**.
+- Verification: `npm test` passed.
+- Why this matters: makes state provenance explicit (persisted vs freshly generated), reducing reviewer confusion in workflow-first QA→revision loops.
+- Self-check: yes, this directly improves inspectability and operational clarity for evidence-backed research/writing iteration.
+- Next immediate step: add a tiny timestamp alongside saved briefs (generated/loaded time) to further improve auditability during long review sessions.
+
+## 2026-03-11 (heartbeat 12:12)
+
+- Added revision-brief timestamp metadata + status display in run details (`public/index.html`):
+  - Upgraded brief persistence format to include `{ text, updatedAt }` per run (with backward compatibility for legacy v1 string entries).
+  - **Saved brief loaded** chip now shows timestamp when available.
+  - **Brief generated** chip now includes generation timestamp immediately after brief creation.
+  - Existing “Use brief as next run goal” now reads from normalized entry helper for both legacy/new formats.
+- Verification: `npm test` passed.
+- Why this matters: improves inspectability of QA-to-revision handoff by making brief freshness/provenance explicit during long workflow-first review sessions.
+- Self-check: yes, this directly advances evidence-backed revision auditability without scope creep.
+- Next immediate step: add a tiny stale-age cue (e.g., “saved 2h ago”) to help reviewers prioritize regenerating outdated briefs.
