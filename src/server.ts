@@ -11,6 +11,8 @@ import { validateWorkflowEvidenceBundle, findUnsupportedClaims } from "./domain/
 import { classifyTask } from "./domain/task";
 import { selectPlanningModel } from "./llm/selector";
 import { saveRunContext, getRecentContexts } from "./memory/context";
+import { retrieveContext, hitsToHints } from "./memory/retrieval";
+import { selectExecutionModel } from "./llm/selector";
 
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
 
@@ -60,6 +62,7 @@ type RunRecord = {
     enforce?: EnforceConfig;
     anti_overfitting_applied?: boolean;
     taskClassification?: { type: string; complexity: string };
+    executionModel?: { provider: string; model: string };
   };
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
@@ -1131,6 +1134,14 @@ app.get("/memory/contexts", async (req, res) => {
   return res.json(contexts);
 });
 
+app.get("/memory/search", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  if (!q) return res.status(400).json({ error: "Missing query parameter q" });
+  const limit = Math.max(1, Math.min(20, Number(req.query.limit ?? 6)));
+  const hits = await retrieveContext(q, limit);
+  return res.json(hits);
+});
+
 app.post('/workflow/recommend', (req, res) => {
   const goal = String(req.body?.goal ?? '').trim();
   if (!goal) return res.status(400).json({ error: 'Missing goal in body' });
@@ -1239,10 +1250,6 @@ app.post("/run", (req, res) => {
   if (!goal) {
     return res.status(400).json({ error: "Missing goal in body" });
   }
-  const disallowed = /fix\s+bug|feature|ui automation|openclaw_act|cursor ui|click button|refactor code|add endpoint/i;
-  if (disallowed.test(goal)) {
-    return res.status(400).json({ error: "Paper Mode Only: non-writing engineering/UI goals are disabled." });
-  }
 
   const roleAssignmentsRaw = (req.body?.roleAssignments ?? undefined) as RoleAssignments | undefined;
   const roleAssignments = normalizeRoleAssignments(roleAssignmentsRaw);
@@ -1265,6 +1272,7 @@ app.post("/run", (req, res) => {
 
   const runId = makeRunId();
   const taskClassification = classifyTask(goal);
+  const executionModel = selectExecutionModel(taskClassification.type, taskClassification.complexity);
   const record: RunRecord = {
     id: runId,
     goal,
@@ -1282,6 +1290,7 @@ app.post("/run", (req, res) => {
       enforce,
       anti_overfitting_applied,
       taskClassification: { type: taskClassification.type, complexity: taskClassification.complexity },
+      executionModel,
     },
     pendingStepId: null,
     pendingReason: null,
@@ -1323,18 +1332,23 @@ app.post("/run", (req, res) => {
       pushLog(run, "planner:start");
       pushLog(run, `[Orchestrator] Goal: ${goal}`);
       pushLog(run, `[Knox] task_type=${run.config?.taskClassification?.type ?? "?"} complexity=${run.config?.taskClassification?.complexity ?? "?"}`);
+      pushLog(run, `[Knox] execution_model=${run.config?.executionModel?.provider ?? "?"}:${run.config?.executionModel?.model ?? "?"}`);
       pushLog(run, `[Orchestrator] LLM provider=${provider}, model=${model}`);
       pushLog(run, `[Config] ANTHROPIC_API_KEY ${anthropicKey ? "exists" : "missing"}`);
       pushLog(run, `[Config] OPENAI_API_KEY ${openaiKey ? "exists" : "missing"}`);
       pushLog(run, `[Config] DEEPSEEK_API_KEY ${deepseekKey ? "exists" : "missing"}`);
       pushLog(run, `[Config] OLLAMA_BASE_URL=${ollamaBase}`);
 
+      const retrievalHits = await retrieveContext(goal, 6).catch(() => []);
+      const contextHints = hitsToHints(retrievalHits);
+      if (contextHints.length) pushLog(run, `[Memory] retrieved ${contextHints.length} context hits for planning`);
+
       const wfPlan = buildPaperPlanFromWorkflow(goal, run.config?.workflowStages);
       if (wfPlan) {
         run.plan = wfPlan;
         pushLog(run, `workflow_plan_override: using ${wfPlan.steps.length} workflow-derived steps`);
       } else {
-        run.plan = await planner(goal, provider, model);
+        run.plan = await planner(goal, provider, model, contextHints);
       }
 
       if (run.plan) {
@@ -1422,6 +1436,7 @@ app.get("/runs", (req, res) => {
         count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
       },
       taskClassification: r.config?.taskClassification ?? null,
+      executionModel: r.config?.executionModel ?? null,
       docxPath: r.artifacts?.docxPath ?? null,
       exportMdPath: r.artifacts?.exportMdPath ?? null,
       v2_score: r.artifacts?.judge_v2?.overall_score ?? null,

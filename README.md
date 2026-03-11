@@ -13,6 +13,8 @@ This branch is now evolving from a pure workflow UI into a **task-aware orchestr
 - **Dynamic model selection** for planning and execution, with env-based overrides
 - **Persistent run memory** (`docs/memory/runs.jsonl`) to retain context across runs
 - **Memory architecture panel** in the UI for visualizing the plan → task → model → memory loop
+- **Context retrieval loop** for planning (`/memory/search`) using recent memory + exports
+- **Programming/general goals enabled** (no hard paper-only block)
 - **New API endpoint**: `GET /memory/contexts` for recent context retrieval
 
 ## Screenshots
@@ -169,6 +171,9 @@ Get run details, logs, and artifacts.
 
 ### `GET /memory/contexts?limit=50`
 Get recent run contexts from Knox memory (task type, complexity, status, summary).
+
+### `GET /memory/search?q=...&limit=6`
+Keyword retrieval over persisted run memory and recent markdown exports for planning context hints.
 
 ### `POST /workflow/recommend`
 Get recommended workflow/roles for a goal.

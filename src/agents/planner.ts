@@ -32,8 +32,9 @@ const planSchema = z.object({
     .min(1),
 });
 
-function isPaperGoal(_goal: string): boolean {
-  return true;
+function isPaperGoal(goal: string): boolean {
+  const g = goal.toLowerCase();
+  return /(research|report|article|essay|policy|analysis|paper|write|word document|thesis|citation|sources?|论文|研究)/.test(g);
 }
 
 function fallbackPlan(goal: string): Plan {
@@ -396,7 +397,7 @@ function fallbackPlan(goal: string): Plan {
   };
 }
 
-export async function planner(goal: string, provider: LLMProvider, model: string): Promise<Plan> {
+export async function planner(goal: string, provider: LLMProvider, model: string, contextHints: string[] = []): Promise<Plan> {
   const lower = goal.toLowerCase();
   if (isPaperGoal(goal) || lower.includes("phase 1 role assignment") || lower.includes("phase 2 multi research demo") || lower.includes("phase 3a workflow builder demo") || lower.includes("stage 3") || lower.includes("test run evidence") || lower.includes("cursor readme demo") || lower.includes("test output demo") || lower.includes("[debug_") || lower.includes("word document") || lower.includes("research this topic")) {
     return fallbackPlan(goal);
@@ -407,9 +408,11 @@ export async function planner(goal: string, provider: LLMProvider, model: string
 
   const userPrompt = [
     `Goal: ${goal}`,
+    contextHints.length ? `Recent context hints:\n- ${contextHints.join("\n- ")}` : "Recent context hints: (none)",
     `Return strict JSON only with shape: { goal, steps:[{id, objective, tools, success_criteria, inputs?}] }`,
     `Allowed tools: shell_run, file_read, file_write, openclaw_act, cursor_act`,
-    `Need 3-5 steps.`,
+    `Need 3-6 steps.`,
+    `Prefer including an early context/research step for quality when task is complex.`,
     `Avoid writing over README.md; write generated output to README.generated.md if needed.`,
   ].join("\n");
 

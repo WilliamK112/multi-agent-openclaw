@@ -282,16 +282,16 @@
     .knox-node.glow { filter: drop-shadow(0 0 8px rgba(110,168,254,.4)); }
     .knox-line {
       fill: none;
-      stroke: #3b82f6;
-      stroke-width: 0.8;
-      stroke-opacity: 0.35;
+      stroke: #60a5fa;
+      stroke-width: 1;
+      stroke-opacity: 0.6;
       stroke-linecap: round;
-      stroke-dasharray: 6 4;
-      animation: knoxFlow 2.5s linear infinite;
+      stroke-dasharray: 4 3;
+      animation: knoxFlow 1.8s linear infinite;
     }
     .knox-line.solid { stroke-dasharray: none; stroke-opacity: 0.5; animation: none; }
     @keyframes knoxFlow {
-      to { stroke-dashoffset: -20; }
+      to { stroke-dashoffset: -14; }
     }
     .knox-memory-bar {
       height: 8px;
@@ -354,16 +354,6 @@
       <div class="status-badge" id="system-status">System: checking…</div>
     </div>
 
-    <details class="panel" style="margin-bottom:10px;">
-      <summary style="cursor:pointer;font-size:.84rem;color:#c2cada;">Recent Changes</summary>
-      <div style="font-size:0.82rem;line-height:1.45;opacity:.92;margin-top:8px;">
-        <div>• Added Workflow Builder mode (stages + agents + mergePolicy + JSON preview).</div>
-        <div>• Added multi-agent Research/Synth/QA stage assignment support.</div>
-        <div>• New English article: <code>docs/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.md</code></div>
-        <div>• Exported Word file: <code>/Users/William/Desktop/IMMIGRATION_ICE_STATE_LOCAL_COOP_EN.docx</code></div>
-      </div>
-    </details>
-
     <details class="panel knox-arch-panel" style="margin-bottom:16px;" open>
       <summary style="cursor:pointer;font-size:.92rem;font-weight:600;color:#93c5fd;">Memory System Architecture</summary>
       <div style="font-size:.8rem;color:#9caecc;margin-top:4px;margin-bottom:12px;">Intelligent plan–task–memory orchestration, dynamic model selection</div>
@@ -377,50 +367,46 @@
             <filter id="knoxGlowFilter"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
           <!-- Flow lines (dashed = animated data flow) -->
-          <path class="knox-line" d="M 80 80 L 160 80" />
-          <path class="knox-line" d="M 160 80 L 240 80" />
-          <path class="knox-line" d="M 240 80 L 320 80" />
-          <path class="knox-line" d="M 320 80 L 400 80" />
+          <path class="knox-line" d="M 80 80 L 180 80" />
+          <path class="knox-line" d="M 180 80 L 280 80" />
+          <path class="knox-line" d="M 280 80 L 380 80" />
+          <path class="knox-line" d="M 380 80 L 480 80" />
           <path class="knox-line" d="M 80 80 L 80 165 L 380 165" />
           <path class="knox-line" d="M 610 80 L 500 165" />
-          <path class="knox-line" d="M 400 80 L 440 115" />
+          <path class="knox-line" d="M 480 100 L 440 140" />
           <path class="knox-line" d="M 440 190 L 440 268" />
           <path class="knox-line" d="M 440 268 L 380 300" />
           <path class="knox-line" d="M 440 268 L 470 300" />
           <path class="knox-line" d="M 440 268 L 560 300" />
           <path class="knox-line" d="M 440 268 L 650 300" />
-          <path class="knox-line" d="M 440 290 L 440 378" />
           <path class="knox-line" d="M 440 378 L 380 336" />
           <path class="knox-line" d="M 440 378 L 470 336" />
           <path class="knox-line" d="M 440 378 L 560 336" />
           <path class="knox-line" d="M 440 378 L 650 336" />
-          <path class="knox-line" d="M 380 336 L 440 418" />
-          <path class="knox-line" d="M 470 336 L 440 418" />
-          <path class="knox-line" d="M 560 336 L 440 418" />
-          <path class="knox-line" d="M 650 336 L 440 418" />
-          <path class="knox-line" d="M 440 414 L 330 440" />
-          <path class="knox-line" d="M 440 414 L 570 440" />
-          <path class="knox-line solid" d="M 330 440 L 440 460 L 570 440" stroke-opacity="0.2" />
+          <path class="knox-line" d="M 440 396 L 440 420" />
+          <path class="knox-line" d="M 440 452 L 330 460" />
+          <path class="knox-line" d="M 440 452 L 570 460" />
+          <path class="knox-line solid" d="M 330 456 L 440 475 L 570 456" stroke-opacity="0.15" />
           <!-- Nodes -->
           <g class="knox-node glow" transform="translate(40,60)">
             <rect x="0" y="0" width="80" height="40" rx="8" fill="url(#knoxGlow)" stroke="#5b8def" stroke-width="1" opacity="0.95"/>
             <text x="40" y="25" text-anchor="middle" fill="#e6edff" font-size="11" font-weight="500">User Input</text>
           </g>
-          <g class="knox-node" transform="translate(120,60)">
+          <g class="knox-node" transform="translate(140,60)">
             <rect x="0" y="0" width="80" height="40" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1" opacity="0.9"/>
             <text x="40" y="22" text-anchor="middle" fill="#e6edff" font-size="10">Search</text>
             <text x="40" y="35" text-anchor="middle" fill="#94acd7" font-size="8">Any query</text>
           </g>
-          <g class="knox-node" transform="translate(200,60)">
+          <g class="knox-node" transform="translate(240,60)">
             <rect x="0" y="0" width="80" height="40" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1" opacity="0.9"/>
             <text x="40" y="22" text-anchor="middle" fill="#e6edff" font-size="10">Vector Embed</text>
             <text x="40" y="35" text-anchor="middle" fill="#94acd7" font-size="8">Generate</text>
           </g>
-          <g class="knox-node" transform="translate(280,60)">
+          <g class="knox-node" transform="translate(340,60)">
             <rect x="0" y="0" width="80" height="40" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1" opacity="0.9"/>
             <text x="40" y="22" text-anchor="middle" fill="#e6edff" font-size="10">Vector Store</text>
           </g>
-          <g class="knox-node" transform="translate(360,60)">
+          <g class="knox-node" transform="translate(440,60)">
             <rect x="0" y="0" width="80" height="40" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1" opacity="0.9"/>
             <text x="40" y="22" text-anchor="middle" fill="#e6edff" font-size="10">Reorder</text>
             <text x="40" y="35" text-anchor="middle" fill="#94acd7" font-size="8">Result</text>
@@ -477,8 +463,8 @@
             <rect x="0" y="0" width="100" height="40" rx="8" fill="#14532d" stroke="#22c55e" stroke-width="1" opacity="0.95"/>
             <text x="50" y="25" text-anchor="middle" fill="#bbf7d0" font-size="10">Final Output</text>
           </g>
-          <g class="knox-node" transform="translate(360,470)">
-            <text x="80" y="0" text-anchor="middle" fill="#94acd7" font-size="9">Context Update Loop</text>
+          <g class="knox-node" transform="translate(440,485)">
+            <text x="0" y="0" text-anchor="middle" fill="#6b7a9d" font-size="8">Context Update Loop</text>
           </g>
           <g transform="translate(80,495)">
             <text x="0" y="0" fill="#94acd7" font-size="8">Memory Capacity</text>
