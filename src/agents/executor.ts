@@ -375,7 +375,7 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
           logSkill("file_write", { path: `docs/exports/${runId}.draft.md`, word_count: countWords(content) }, out);
           continue;
         }
-        if ((topic || '').toLowerCase().includes('china') && ((topic || '').toLowerCase().includes('us') || (topic || '').toLowerCase().includes('u.s.') || (topic || '').toLowerCase().includes('united states'))) {|united states)/i.test(topic)) {
+        if ((topic || '').toLowerCase().includes('china') && ((topic || '').toLowerCase().includes('us') || (topic || '').toLowerCase().includes('u.s.') || (topic || '').toLowerCase().includes('united states'))) {
           const researchJsonPath = path.join(projectRoot, `docs/exports/${runId}.research.json`);
           const researchPack = JSON.parse(await fs.readFile(researchJsonPath, "utf8").catch(() => '{"sources":[]}'));
           const sources = Array.isArray(researchPack?.sources) ? researchPack.sources : [];

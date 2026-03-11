@@ -1,5 +1,25 @@
 # PROGRESS
 
+## 2026-03-11 (Knox vision foundation)
+
+- Implemented Phase 1–2 of Knox Memory System Architecture roadmap:
+  - **Task classification** (`src/domain/task.ts`): `classifyTask` maps goals to `TaskType` (programming | research_writing | general) and `Complexity` (simple | medium | complex).
+  - **Dynamic model selection** (`src/llm/selector.ts`): `selectPlanningModel()` and `selectExecutionModel(taskType, complexity)` for Knox-style routing. Env overrides: `MODEL_PLANNING`, `MODEL_SIMPLE`, `MODEL_MEDIUM`, `MODEL_COMPLEX`.
+  - **Memory system foundation** (`src/memory/context.ts`): `saveRunContext`, `getRecentContexts`, `getContextByRunId`. Persists run context to `docs/memory/runs.jsonl`.
+  - **Server integration**: Runs now classify task on create; planner uses `selectPlanningModel()`; run completion saves context to memory. New `GET /memory/contexts` endpoint.
+  - **Roadmap**: `docs/KNOX_VISION_ROADMAP.md` maps Knox → multi-agent-openclaw with phased plan (Phases 1–5).
+- Next: Phase 3 (Search/RAG pipeline); Phase 4 (Reorder + TaskSystem formalization); Phase 5 (Programming path with code model tiers).
+
+### Knox architecture diagram (UI)
+
+- Added animated Knox Memory System Architecture diagram to `public/index.html`:
+  - Collapsible panel with title "Knox Memory System Architecture" and subtitle "Intelligent plan–task–memory orchestration, dynamic model selection"
+  - SVG diagram with nodes: User Input, Search, Vector Embed, Vector Store, Reorder, Planning Model, Task System, Task Type, Code Model (Simple/Medium/Complex/General), Response, Memory System, Final Output, Context Update Loop
+  - Animated dashed flow lines (`stroke-dasharray` + `stroke-dashoffset` keyframes)
+  - Glow effects on key nodes (User Input, Task System, Memory System)
+  - Memory capacity bar with gradient and pulse animation
+  - Styled to match existing dark theme (Sora font, brand colors)
+
 ## 2026-03-11
 
 - Added hourly automation for repository backups via git commit+push:

@@ -5,6 +5,16 @@ A desktop-first dark-mode orchestration workspace for multi-agent research and w
 multi-agent-openclaw helps you turn broad prompts into structured, inspectable execution pipelines.  
 It is designed for research/paper-style work where role specialization, workflow stages, and quality gates matter more than one-shot chat output.
 
+## Current Focus (March 2026)
+
+This branch is now evolving from a pure workflow UI into a **task-aware orchestration system**:
+
+- **Task classification** at run start (`programming | research_writing | general`) with complexity tiers (`simple | medium | complex`)
+- **Dynamic model selection** for planning and execution, with env-based overrides
+- **Persistent run memory** (`docs/memory/runs.jsonl`) to retain context across runs
+- **Memory architecture panel** in the UI for visualizing the plan → task → model → memory loop
+- **New API endpoint**: `GET /memory/contexts` for recent context retrieval
+
 ## Screenshots
 
 > Add real screenshots here.
@@ -165,6 +175,9 @@ List recent runs.
 
 ### `GET /runs/:runId`
 Get run details, logs, and artifacts.
+
+### `GET /memory/contexts?limit=50`
+Get recent run contexts from Knox memory (task type, complexity, status, summary).
 
 ### `POST /workflow/recommend`
 Get recommended workflow/roles for a goal.

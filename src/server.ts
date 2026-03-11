@@ -8,6 +8,9 @@ import { planner, type Plan } from "./agents/planner";
 import { executor } from "./agents/executor";
 import { qa } from "./agents/qa";
 import { validateWorkflowEvidenceBundle, findUnsupportedClaims } from "./domain/workflow";
+import { classifyTask } from "./domain/task";
+import { selectPlanningModel } from "./llm/selector";
+import { saveRunContext, getRecentContexts } from "./memory/context";
 
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
 
@@ -56,6 +59,7 @@ type RunRecord = {
     roleAssignmentsByRole?: Record<string, string>;
     enforce?: EnforceConfig;
     anti_overfitting_applied?: boolean;
+    taskClassification?: { type: string; complexity: string };
   };
   artifacts?: {
     researchOutputs?: Array<{ agent: string; text: string }>;
@@ -1091,15 +1095,41 @@ async function continueRun(runId: string) {
     run.status = "done";
     pushLog(run, "run:done");
     await appendRunIndexMeta(run);
+    await saveRunContext({
+      runId: run.id,
+      goal: run.goal,
+      taskType: run.config?.taskClassification?.type ?? "general",
+      complexity: run.config?.taskClassification?.complexity ?? "medium",
+      status: run.status,
+      createdAt: run.createdAt,
+      completedAt: new Date().toISOString(),
+      summary: run.qa?.pass != null ? `QA pass=${run.qa.pass}` : undefined,
+      artifactPaths: [run.artifacts?.exportMdPath, run.artifacts?.docxPath].filter(Boolean) as string[],
+    }).catch(() => undefined);
   } catch (err) {
     run.status = "error";
     run.error = err instanceof Error ? err.stack || err.message : String(err);
     pushLog(run, "run:error");
     await appendRunIndexMeta(run).catch(() => undefined);
+    await saveRunContext({
+      runId: run.id,
+      goal: run.goal,
+      taskType: run.config?.taskClassification?.type ?? "general",
+      complexity: run.config?.taskClassification?.complexity ?? "medium",
+      status: run.status,
+      createdAt: run.createdAt,
+      completedAt: new Date().toISOString(),
+    }).catch(() => undefined);
   } finally {
     run.isProcessing = false;
   }
 }
+
+app.get("/memory/contexts", async (req, res) => {
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const contexts = await getRecentContexts(limit);
+  return res.json(contexts);
+});
 
 app.post('/workflow/recommend', (req, res) => {
   const goal = String(req.body?.goal ?? '').trim();
@@ -1234,6 +1264,7 @@ app.post("/run", (req, res) => {
   const anti_overfitting_applied = Boolean(req.body?.anti_overfitting_applied);
 
   const runId = makeRunId();
+  const taskClassification = classifyTask(goal);
   const record: RunRecord = {
     id: runId,
     goal,
@@ -1250,6 +1281,7 @@ app.post("/run", (req, res) => {
       roleAssignmentsByRole,
       enforce,
       anti_overfitting_applied,
+      taskClassification: { type: taskClassification.type, complexity: taskClassification.complexity },
     },
     pendingStepId: null,
     pendingReason: null,
@@ -1273,8 +1305,7 @@ app.post("/run", (req, res) => {
     if (!run) return;
 
     try {
-      const provider = getProvider();
-      const model = getModel(provider);
+      const { provider, model } = selectPlanningModel();
       const anthropicKey = process.env.ANTHROPIC_API_KEY;
       const openaiKey = process.env.OPENAI_API_KEY;
       const deepseekKey = process.env.DEEPSEEK_API_KEY;
@@ -1291,6 +1322,7 @@ app.post("/run", (req, res) => {
 
       pushLog(run, "planner:start");
       pushLog(run, `[Orchestrator] Goal: ${goal}`);
+      pushLog(run, `[Knox] task_type=${run.config?.taskClassification?.type ?? "?"} complexity=${run.config?.taskClassification?.complexity ?? "?"}`);
       pushLog(run, `[Orchestrator] LLM provider=${provider}, model=${model}`);
       pushLog(run, `[Config] ANTHROPIC_API_KEY ${anthropicKey ? "exists" : "missing"}`);
       pushLog(run, `[Config] OPENAI_API_KEY ${openaiKey ? "exists" : "missing"}`);
@@ -1389,6 +1421,7 @@ app.get("/runs", (req, res) => {
       roleSummary: {
         count: Array.isArray(r.config?.roles) ? r.config.roles.length : 0,
       },
+      taskClassification: r.config?.taskClassification ?? null,
       docxPath: r.artifacts?.docxPath ?? null,
       exportMdPath: r.artifacts?.exportMdPath ?? null,
       v2_score: r.artifacts?.judge_v2?.overall_score ?? null,
