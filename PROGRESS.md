@@ -216,3 +216,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: preserves QA-to-revision continuity during long review sessions, improving workflow-first iterative research-writing loops.
 - Self-check: yes, this directly improves evidence-backed revision ergonomics without broad rewrites.
 - Next immediate step: add a small “clear saved brief” action per run to keep local state tidy.
+
+## 2026-03-11 (heartbeat 11:12)
+
+- Added per-run cleanup action for revision-brief persistence in run details (`public/index.html`):
+  - New button: **Clear saved brief** beside existing revision-brief controls.
+  - Clears in-memory + localStorage entry for the current run id.
+  - Immediately hides/reset the inline brief panel after clearing.
+- Verification: `npm test` passed.
+- Why this matters: keeps QA-to-revision state durable when needed, while allowing reviewers to intentionally reset stale guidance during iterative research/writing loops.
+- Self-check: yes, this improves workflow-first evidence QA hygiene (explicit state control per run) without expanding scope.
+- Next immediate step: add a small “saved brief loaded” status chip so reviewers can tell when detail panel content came from persisted localStorage vs fresh generation.
