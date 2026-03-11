@@ -204,31 +204,37 @@ function recommendWorkflow(goal: string): WorkflowRecommendation {
   ];
 
   if (goalType === "research_writing") {
+    const hasDeepseek = Boolean(process.env.DEEPSEEK_API_KEY);
+    const hasAnthropic = Boolean(process.env.ANTHROPIC_API_KEY);
+    const researchAgents = hasDeepseek
+      ? ["deepseek:local", "chatgpt-api:gpt-4o-mini"]
+      : ["chatgpt-api:gpt-4o-mini", "openai:gpt-4o-mini"];
+    const reviewQaAgent = hasAnthropic ? "anthropic:sonnet" : "chatgpt-api:gpt-4o-mini";
     return {
       goalType,
       explainWhy: "Detected research/writing intent. Added explicit thesis planning + evidence audit to avoid generic outputs and improve final-essay quality.",
       costHint: "high",
       workflowStages: [
-        { id: "s1", type: "plan", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "extract thesis + scope + target structure" },
-        { id: "s2", type: "research", agents: ["deepseek:local", "chatgpt-api:gpt-4o-mini"], mergePolicy: "none", notes: "collect >=12 credible sources across policy/econ/security" },
-        { id: "s3", type: "synth", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "draft 1500-2000 words with 3 analytical sections" },
-        { id: "s4", type: "review", agents: ["anthropic:sonnet"], mergePolicy: "summary", notes: "strengthen counterarguments + uncertainty + references" },
-        { id: "s5", type: "execute", agents: [], mergePolicy: "none", notes: "export final md/docx artifacts" },
-        { id: "s6", type: "qa", agents: ["anthropic:sonnet"], mergePolicy: "judge", notes: "final gate: thesis/sources/wordcount/citations" },
+        { id: "s1", type: "plan", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "extract thesis + scope + strict writing contract", roleId: "thesis_planner" },
+        { id: "s2", type: "research", agents: researchAgents, mergePolicy: "none", notes: "collect >=12 credible sources with claim mapping (deliberate pass)", roleId: "researcher" },
+        { id: "s3", type: "synth", agents: ["chatgpt-api:gpt-4o-mini"], mergePolicy: "summary", notes: "draft 1500-1900 words + self-check for headings/wordcount/citations", roleId: "synthesizer" },
+        { id: "s4", type: "review", agents: [reviewQaAgent], mergePolicy: "summary", notes: "strengthen counterarguments + uncertainty + citation integrity", roleId: "citation_editor" },
+        { id: "s5", type: "execute", agents: [], mergePolicy: "none", notes: "export final md/docx artifacts", roleId: "executor" },
+        { id: "s6", type: "qa", agents: [reviewQaAgent], mergePolicy: "judge", notes: "strict final gate: thesis/sources/wordcount/citations/no-prompt-echo", roleId: "qa_judge" },
       ],
       roles: [
-        { id: "thesis_planner", name: "Thesis Planner", prompt: "Extract a single clear thesis, define scope boundaries, and lock target structure before drafting." },
-        { id: "researcher", name: "Researcher", prompt: "Collect at least 12 high-credibility sources with links and source-type diversity; avoid generic filler." },
-        { id: "synthesizer", name: "Synthesizer", prompt: "Produce a concrete essay draft (1500-2000 words) with explicit evidence linkage per section." },
-        { id: "citation_editor", name: "Citation Editor", prompt: "Audit references for quality and relevance; remove weak citations and add missing source context." },
-        { id: "qa_judge", name: "QA Judge", prompt: "Score thesis clarity, evidence specificity, counterarguments, and citation integrity; return strict pass/fail with fixes." },
+        { id: "thesis_planner", name: "Thesis Planner", prompt: "Output JSON-only writing contract: title, thesis ('This essay argues that...'), exact section plan with word budgets, citation plan (min_sources=10,min_in_text_citations=8), and risk checks (no prompt echo/no placeholder refs/no extra headings)." },
+        { id: "researcher", name: "Researcher", prompt: "Build evidence pack JSON only with >=12 high-credibility sources (gov/IO/thinktank/journal/data), each including org,title,year,url,type,claims_supported,one concrete fact; avoid homepage-only links and fabricated entries." },
+        { id: "synthesizer", name: "Synthesizer", prompt: "Write final essay markdown only using exact required headings; 1500-1900 words; >=8 in-text citations (Org, Year); Works Cited format 'Organization — Title — Year — URL'; no Abstract/no extra sections/no prompt echo/no placeholders." },
+        { id: "citation_editor", name: "Citation Editor", prompt: "Perform citation-integrity repair only: output issues+patches JSON, fix missing in-text citations, weak/invalid sources, untraceable claims; do not invent sources; preserve argument while improving traceability." },
+        { id: "qa_judge", name: "QA Judge", prompt: "Return strict gate JSON with pass/fail, rubric scores, and hard checks (word_count, exact headings, min sources, in-text citation count, no placeholders, paragraph budgets); fail if any hard check fails and provide top 5 concrete fixes." },
       ],
       roleAssignmentsByRole: {
         thesis_planner: "chatgpt-api:gpt-4o-mini",
-        researcher: "deepseek:local",
+        researcher: hasDeepseek ? "deepseek:local" : "chatgpt-api:gpt-4o-mini",
         synthesizer: "chatgpt-api:gpt-4o-mini",
-        citation_editor: "anthropic:sonnet",
-        qa_judge: "anthropic:sonnet",
+        citation_editor: reviewQaAgent,
+        qa_judge: reviewQaAgent,
       },
       meetingRoom: [
         ...baseMeeting,
@@ -499,21 +505,52 @@ function evaluateWorksCited(md: string) {
   const block = m ? m[2] : "";
   const lines = block ? block.split(/\n+/).filter((x)=>x.trim().startsWith('- ')).map((x)=>x.trim()) : [];
   const invalid: string[] = [];
+  const homepageLike: string[] = [];
   const isPlaceholder = (ln: string) => /(Source|Reference)\s*\d+/i.test(ln);
   for (const ln of lines) {
     const hasUrl = /https?:\/\//i.test(ln);
     const hasTitle = /“.+”|".+"|:/.test(ln);
     const hasOrg = /[—-].+[—-]/.test(ln) || /University|Bureau|Department|Institute|Agency|Council|Association|Office/i.test(ln);
+    const url = ln.match(/https?:\/\/[^\s)]+/i)?.[0] || "";
+    const homepage = (() => {
+      if (!url) return false;
+      try {
+        const u = new URL(url);
+        return u.pathname === "/" || u.pathname === "";
+      } catch {
+        return false;
+      }
+    })();
+    if (homepage) homepageLike.push(ln);
     if (isPlaceholder(ln) || !hasUrl || !hasTitle || !hasOrg) invalid.push(ln);
   }
+  const validCount = lines.length - invalid.length;
+  const base = lines.length ? (validCount / lines.length) * 100 : 0;
+  const homepagePenalty = lines.length ? (homepageLike.length / lines.length) * 25 : 0;
+  const citation_quality_score = Math.max(0, Math.round(base - homepagePenalty));
   return {
     works_cited_count: lines.length,
-    works_cited_valid_count: lines.length - invalid.length,
+    works_cited_valid_count: validCount,
     placeholder_reference_detected: invalid.some((x)=>/(Source|Reference)\s*\d+/i.test(x)),
     invalid_entries_sample: invalid.slice(0,3),
+    homepage_reference_count: homepageLike.length,
+    citation_quality_score,
   };
 }
 
+
+function sanitizePromptEchoDraft(md: string): { text: string; changed: boolean } {
+  let out = md;
+  const before = out;
+  out = out.replace(/^#\s*Write\s+a[\s\S]*?(?=\n##\s+|\n#\s+|$)/i, "");
+  out = out.replace(/\n##\s+Abstract[\s\S]*?(?=\n##\s+Introduction|\n##\s+Section\s+1|$)/i, "\n");
+  out = out.replace(/\n##\s+References\b/i, "\n## Works Cited");
+  out = out.replace(/\n##\s+Counterarguments and Responses\b/gi, "\n## Counterarguments and Limitations");
+  out = out.replace(/\n##\s+Uncertainty\s*\/\s*Limitations\b/gi, "\n## Counterarguments and Limitations");
+  out = out.replace(/\n##\s+Counterarguments and Limitations[\s\S]*\n##\s+Counterarguments and Limitations/gi, "\n## Counterarguments and Limitations");
+  out = out.replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  return { text: out, changed: out !== before };
+}
 
 function buildEvidenceBundleFromMarkdown(runId: string, md: string, researchText: string) {
   const sourceLines = (md.match(/##\s+(Works Cited|Sources)\n([\s\S]*?)(\n##\s+|$)/i)?.[2] || "")
@@ -867,6 +904,14 @@ async function continueRun(runId: string) {
       .replace(/\n##\s+Revision Actions Based on Judge[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
       .replace(/\n##\s+Added Sources \(new\)[\s\S]*?(?=\n##\s+Counterarguments|$)/gi, "")
       .replace(/\n##\s+References Addendum[\s\S]*$/gi, "");
+    const promptEchoRaw = /^#\s*Write\s+a\s+/i.test(finalMdText.trim()) || /Hard requirements\s*\(must follow all\)/i.test(finalMdText);
+    if (promptEchoRaw) {
+      const sanitized = sanitizePromptEchoDraft(finalMdText);
+      if (sanitized.changed) {
+        finalMdText = sanitized.text;
+        pushLog(run, "auto_rewrite: prompt_echo_sanitized");
+      }
+    }
     await fsp.writeFile(expectedMd, finalMdText, "utf8").catch(() => undefined);
     const draftMdText = await fsp.readFile(path.join(process.cwd(), `docs/exports/${run.id}.draft.md`), "utf8").catch(() => "");
     const providerAvailability = imageProviderAvailability();
@@ -931,10 +976,12 @@ async function continueRun(runId: string) {
       const topicMismatch = /meaning of life/i.test(run.goal) && !/meaning of life|existential|aristotle|sartre|camus|frankl/i.test(finalMdText);
       const repeatedFiller = ((finalMdText.match(/\bAdditional\s+[a-z-]+/gi) || []).length) >= 3;
       const internalLeak = /Evidence Injection Plan|Revision Actions Based on Judge|ANTI_MODE_PRIORITIZE_EVIDENCE|References Addendum/i.test(finalMdText);
+      const promptEchoDetected = /^#\s*Write\s+a\s+/i.test(finalMdText.trim()) || /Hard requirements\s*\(must follow all\)/i.test(finalMdText);
       if (repeat.repeat_flags) out.push(...repeat.reasons);
       if (topicMismatch) out.push("topic_mismatch_with_goal");
       if (repeatedFiller) out.push("repeated_filler_phrases_detected");
       if (internalLeak) out.push("internal_pipeline_text_leaked_to_final");
+      if (promptEchoDetected) out.push("prompt_echo_detected");
       if (!paraEval.checks.intro_in_range) out.push("intro_length_out_of_range");
       if (!paraEval.checks.body_longer_than_intro) out.push("body_not_longer_than_intro");
       if (!paraEval.checks.two_body_ge_200) out.push("body_paragraphs_too_uniform");
@@ -942,6 +989,7 @@ async function continueRun(runId: string) {
       if (!paraEval.checks.no_template_labels) out.push("template_paragraph_labels_present");
       if (citeEval.placeholder_reference_detected) out.push("placeholder_references_present");
       if (citeEval.works_cited_valid_count < 6) out.push("invalid_works_cited_entries");
+      if (Number(citeEval.citation_quality_score ?? 0) < 65) out.push("citation_quality_score_low");
       if (/include\s+1\s+relevant\s+figure|include\s+figure/i.test(run.goal)) {
         const allDisabled = Object.values(providerAvailability as any).every((x: any) => !x.enabled);
         if (!imageArtifacts || !imageArtifacts.selected || imageArtifacts.selected.length < 1) out.push(allDisabled ? "image_provider_all_disabled" : "image_download_failed");
@@ -1012,6 +1060,8 @@ async function continueRun(runId: string) {
       placeholder_reference_detected: citeEval.placeholder_reference_detected,
       works_cited_count: citeEval.works_cited_count,
       works_cited_valid_count: citeEval.works_cited_valid_count,
+      citation_quality_score: citeEval.citation_quality_score,
+      homepage_reference_count: citeEval.homepage_reference_count,
       invalid_entries_sample: citeEval.invalid_entries_sample,
       images: imageArtifacts,
       images_selected_count: Number(imageArtifacts?.selected?.length || 0),

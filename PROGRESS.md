@@ -122,3 +122,45 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: lowers interpretation friction during evidence QA, making review decisions faster and clearer in workflow-first demos.
 - Self-check: yes, this directly improves evidence inspectability UX for research/writing quality gates.
 - Next immediate step: add per-row quick action text (e.g., “needs source”) to make remediation intent explicit.
+
+## 2026-03-11 (heartbeat 07:57)
+
+- Added per-row remediation cue text in Unsupported Claim Breakdown (`public/index.html`):
+  - Added new **Action** column with explicit status labels (`needs source` / `linked`).
+  - Action labels are color-coded to speed triage of unsupported claims.
+- Verification: `npm test` passed.
+- Why this matters: turns evidence diagnostics into immediate revision guidance, improving workflow-first QA-to-fix handoff speed.
+- Self-check: yes, this directly improves evidence-backed research/writing remediation clarity.
+- Next immediate step: add an action filter toggle (show only `needs source`) for even faster revision targeting.
+
+## 2026-03-11 (heartbeat 08:22)
+
+- Added action-level triage filtering in Unsupported Claim Breakdown (`public/index.html`):
+  - New toggle: **Show only needs source**.
+  - Implemented unified filter application logic so it composes with existing **Focus unsupported claims (0 links)** toggle.
+  - Counter now updates correctly under combined filters.
+- Verification: `npm test` passed.
+- Why this matters: reviewers can isolate highest-priority remediation rows faster, improving workflow-first evidence QA throughput.
+- Self-check: yes, this directly tightens the revision loop for evidence-backed research/writing.
+- Next immediate step: persist these table-filter preferences per run in UI state for smoother reviewer workflow.
+
+## 2026-03-11 (heartbeat 08:29)
+
+- Added one-click handoff from QA diagnostics to next run goal (`public/index.html`):
+  - New button: **Use brief as next run goal** in Unsupported Claim Breakdown controls.
+  - Revision brief text is now stored after generation and can be injected directly into the top goal input.
+  - Auto-focuses goal input and scrolls to top for immediate rerun.
+- Verification: `npm test` passed.
+- Why this matters: closes the loop between evidence QA findings and the next workflow run, reducing friction in iterative research-writing improvement.
+- Self-check: yes, this directly improves workflow-first revision velocity with evidence-backed feedback reuse.
+- Next immediate step: persist generated revision brief across refresh (localStorage) for resilience during long review sessions.
+
+## 2026-03-11 (heartbeat 08:35)
+
+- Added run-level fake-provider quality warning in run details (`public/index.html`):
+  - Detects `LLM provider=fake` from run logs.
+  - Shows a prominent warning banner explaining low-fidelity output risk and recommending real provider configuration.
+- Verification: `npm test` passed.
+- Why this matters: makes model/runtime quality failure mode immediately visible during workflow review, preventing misdiagnosis of prompt/workflow logic when the root cause is provider configuration.
+- Self-check: yes, this directly improves workflow-first debugging clarity for evidence-backed research-writing.
+- Next immediate step: add persistent localStorage memory for generated revision brief text across page refresh.

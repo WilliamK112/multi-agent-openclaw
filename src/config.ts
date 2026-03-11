@@ -2,8 +2,16 @@ import "dotenv/config";
 import { LLMProvider } from "./llm/types";
 
 export function getProvider(): LLMProvider {
-  const p = (process.env.LLM_PROVIDER ?? "fake").toLowerCase();
-  if (p === "claude" || p === "gemini" || p === "openai" || p === "deepseek" || p === "ollama" || p === "fake") return p;
+  const raw = process.env.LLM_PROVIDER;
+  const p = (raw ?? "").toLowerCase();
+  if (p === "claude" || p === "gemini" || p === "openai" || p === "deepseek" || p === "ollama" || p === "fake") {
+    if (p !== "fake") return p;
+  }
+  // safer default: prefer real providers when keys exist
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.ANTHROPIC_API_KEY) return "claude";
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (process.env.OLLAMA_BASE_URL) return "ollama";
   return "fake";
 }
 

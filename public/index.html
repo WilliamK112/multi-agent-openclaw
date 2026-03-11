@@ -5,22 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>multi-agent-openclaw</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+    :root {
+      --bg: #070b14;
+      --bg-2: #0d1424;
+      --panel: rgba(18, 26, 43, 0.78);
+      --panel-2: rgba(13, 21, 36, 0.86);
+      --line: #2a3651;
+      --line-soft: #1f2a3d;
+      --text: #e6edff;
+      --muted: #9caecc;
+      --brand: #6ea8fe;
+      --brand-2: #93c5fd;
+      --good: #86efac;
+      --warn: #fca5a5;
+      --shadow: 0 16px 40px rgba(0,0,0,.35);
+    }
     * { box-sizing: border-box; }
     body {
-      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-family: 'Sora', ui-sans-serif, sans-serif;
       margin: 0;
       padding: 24px;
-      background: #0f0f0f;
-      color: #e4e4e7;
+      background:
+        radial-gradient(1200px 700px at 10% -5%, rgba(86, 134, 255, 0.18), transparent 55%),
+        radial-gradient(900px 600px at 95% 0%, rgba(14, 165, 233, 0.14), transparent 48%),
+        linear-gradient(180deg, var(--bg) 0%, #05080f 100%);
+      color: var(--text);
       line-height: 1.5;
     }
-    .container { max-width: 980px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+    .container { max-width: 1080px; margin: 0 auto; }
+    h1 {
+      font-size: 1.72rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: .01em;
+      text-shadow: 0 2px 24px rgba(110,168,254,.2);
+    }
     .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom: 14px; }
-    .subtitle { color:#98a2b8; font-size:.83rem; margin-top:4px; }
-    .status-badge { font-size:.72rem; border:1px solid #3e4558; color:#c6d0e6; background:#141924; border-radius:999px; padding:4px 10px; white-space:nowrap; }
-    .step { margin: 14px 0 8px; font-size:.76rem; letter-spacing:.06em; text-transform:uppercase; color:#8a94aa; }
-    .section-divider { border-top:1px solid #262c39; margin: 14px 0 10px; }
+    .subtitle { color:var(--muted); font-size:.84rem; margin-top:6px; max-width: 68ch; }
+    .status-badge { font-size:.72rem; border:1px solid #37507e; color:#d5e6ff; background:linear-gradient(180deg,#12233f 0%, #101d33 100%); border-radius:999px; padding:4px 10px; white-space:nowrap; box-shadow: var(--shadow); }
+    .step { margin: 16px 0 10px; font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:#94acd7; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+    .section-divider { border-top:1px solid var(--line); margin: 16px 0 12px; }
     .form-row {
       display: flex;
       gap: 12px;
@@ -29,37 +54,41 @@
     input[type="text"] {
       flex: 1;
       padding: 12px 16px;
-      border: 1px solid #3f3f46;
-      border-radius: 8px;
-      background: #18181b;
-      color: #e4e4e7;
-      font-size: 1rem;
+      border: 1px solid #334867;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #0f192b 0%, #0c1523 100%);
+      color: var(--text);
+      font-size: .96rem;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
     }
-    input[type="text"]::placeholder { color: #71717a; }
+    input[type="text"]::placeholder { color: #7286a8; }
     input[type="text"]:focus {
       outline: none;
-      border-color: #6366f1;
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.2);
     }
     button {
       padding: 12px 20px;
       border: none;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 500;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: all 0.16s;
+      font-family: 'Sora', ui-sans-serif, sans-serif;
     }
     .btn-primary {
-      background: #6366f1;
+      background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
       color: white;
+      box-shadow: 0 10px 18px rgba(59,130,246,.24);
     }
-    .btn-primary:hover { background: #4f46e5; }
+    .btn-primary:hover { transform: translateY(-1px); filter: saturate(1.06); }
     .btn-success {
-      background: #22c55e;
-      color: white;
+      background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+      color: #04210f;
+      box-shadow: 0 10px 18px rgba(34,197,94,.2);
     }
-    .btn-success:hover { background: #16a34a; }
+    .btn-success:hover { transform: translateY(-1px); }
     .role-board {
       display: grid;
       grid-template-columns: 0.95fr 2.05fr;
@@ -68,13 +97,14 @@
       align-items: start;
     }
     .panel {
-      background: linear-gradient(180deg, #18181b 0%, #15161a 100%);
-      border: 1px solid #2a2d36;
-      border-radius: 12px;
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--line);
+      border-radius: 14px;
       padding: 14px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), var(--shadow);
+      backdrop-filter: blur(6px);
     }
-    .panel h3 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; letter-spacing: .01em; color:#e7e9ee; }
+    .panel h3 { margin: 0 0 10px; font-size: 0.92rem; font-weight: 600; letter-spacing: .01em; color:var(--brand-2); }
     .agent-chip {
       display: inline-block;
       background: #27272a;
@@ -148,37 +178,55 @@
     .json-preview { font-family: ui-monospace, monospace; font-size: 0.70rem; background:#0c0d11; border:1px solid #262a33; padding:9px; border-radius:8px; white-space:pre-wrap; margin-top:10px; color:#99a3ba; }
     .runs { margin-top: 32px; }
     .run-card {
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 8px;
-      padding: 16px;
+      position: relative;
+      background: linear-gradient(180deg, rgba(17,24,39,.92) 0%, rgba(12,19,32,.9) 100%);
+      border: 1px solid #2f415f;
+      border-radius: 14px;
+      padding: 16px 16px 14px;
       margin-bottom: 12px;
       cursor: pointer;
-      transition: border-color 0.15s;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+      box-shadow: 0 10px 24px rgba(0,0,0,.22);
     }
-    .run-card:hover { border-color: #3f3f46; }
-    .run-card.selected { border-color: #6366f1; }
+    .run-card:hover { border-color: #5b79ad; transform: translateY(-2px); box-shadow: 0 16px 30px rgba(16, 32, 66, .35); }
+    .run-card.selected { border-color: #7db1ff; box-shadow: 0 0 0 1px rgba(125,177,255,.35), 0 18px 30px rgba(18,61,138,.25); }
+    .run-card.running-live::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 14px;
+      border: 1px solid rgba(110,168,254,.65);
+      animation: pulseLive 1.8s ease-out infinite;
+      pointer-events: none;
+    }
     .run-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
     }
-    .run-goal { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-goal { font-weight: 600; font-size:.92rem; flex: 1; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:#eaf2ff; }
     .run-status {
       padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 500;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing:.04em;
+      text-transform: uppercase;
+      border:1px solid transparent;
     }
-    .run-status.queued { background: #27272a; color: #a1a1aa; }
-    .run-status.running { background: #1e3a5f; color: #93c5fd; }
-    .run-status.needs_approval { background: #422006; color: #fcd34d; }
-    .run-status.done { background: #14532d; color: #86efac; }
-    .run-status.error { background: #450a0a; color: #fca5a5; }
-    .open-output-btn { margin-left:8px; font-size:.72rem; padding:3px 8px; border-radius:999px; border:1px solid #3f3f46; background:#1f2937; color:#e5e7eb; cursor:pointer; }
-    .open-output-btn:hover { background:#374151; }
-    .run-meta { font-size: 0.85rem; color: #71717a; margin-top: 8px; }
+    .run-status.queued { background: #1d2431; color: #a9b5c8; border-color:#37465d; }
+    .run-status.running { background: #102946; color: #9bd2ff; border-color:#365f8d; }
+    .run-status.needs_approval { background: #3a260f; color: #f8d184; border-color:#78531e; }
+    .run-status.done { background: #103420; color: #9df7c4; border-color:#2d6d48; }
+    .run-status.error { background: #3a1217; color: #ffb4be; border-color:#7f2733; }
+    .open-output-btn { margin-left:8px; font-size:.70rem; padding:4px 10px; border-radius:999px; border:1px solid #3f5577; background:#162135; color:#deebff; cursor:pointer; }
+    .open-output-btn:hover { background:#1e2d47; border-color:#6283b5; }
+    .run-meta { font-size: 0.79rem; color: #91a7cb; margin-top: 8px; line-height:1.45; }
+    @keyframes pulseLive {
+      0% { opacity: .9; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.01); }
+    }
     .detail-panel {
       margin-top: 24px;
       padding: 20px;
@@ -202,6 +250,21 @@
     }
     .empty { color: #71717a; text-align: center; padding: 48px 24px; }
     .error-msg { color: #fca5a5; margin-top: 12px; }
+
+    @media (max-width: 900px) {
+      body { padding: 14px; }
+      .container { max-width: 100%; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .runs { grid-template-columns: 1fr; gap: 10px; }
+      .run-card { padding: 12px; border-radius: 12px; }
+      .run-header { flex-direction: column; align-items: stretch; gap: 8px; }
+      .run-goal { -webkit-line-clamp: 3; }
+      .open-output-btn { margin-left: 0; margin-right: 6px; margin-top: 6px; display: inline-block; }
+      .detail-panel { margin-top: 16px; padding: 14px; }
+      .panel { padding: 12px; border-radius: 12px; }
+      .form-row { flex-direction: column; }
+      button.btn-primary { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -366,6 +429,7 @@
     let trendState = { filteredRuns: [], topReason: null, overfitWarning: null };
     let runEnforce = null;
     let antiOverfittingApplied = false;
+    const unsupportedFilterStateByRun = {};
 
     const AGENTS = [
       { id: 'ollama:llama3.1', label: 'ollama:llama3.1（本地免费）', categories: ['reasoning', 'coding'], avatar: '🦙', avatarUrl: '/agent-avatars/generated/001-a-consistent-set-of-8-flat-vector-profes.png', displayName: 'Local Llama Engineer' },
@@ -395,12 +459,12 @@
       { id: 's6', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'docx+content QA', roleId: 'qa_judge' },
     ];
     let workflowRoles = [
-      { id: 'researcher_1', name: 'Researcher', prompt: 'Role: Researcher\nBoundary: collect >=10 diverse sources\nInput: paper topic\nOutput: sources + notes\nFormat: bullet list with URLs\nRisk check: identify weak evidence\nCost cap: medium\nNo private data' },
-      { id: 'outliner', name: 'Outliner', prompt: 'Role: Outliner\nBoundary: build thesis and structure\nInput: research notes\nOutput: outline (3-5 sections)\nFormat: numbered sections\nRisk check: evidence needs per section\nCost cap: low\nNo unsupported claims' },
-      { id: 'drafter', name: 'Drafter', prompt: 'Role: Drafter\nBoundary: write full draft >=1500 words\nInput: approved outline\nOutput: draft markdown\nFormat: title/abstract/body/references\nRisk check: mark uncertainty\nCost cap: medium\nNo fabricated citations' },
-      { id: 'reviser', name: 'Reviser', prompt: 'Role: Reviser\nBoundary: improve logic and balance\nInput: draft\nOutput: revised markdown\nFormat: clear sections\nRisk check: add 2+ counterarguments\nCost cap: low\nList 3 uncertainty gaps' },
+      { id: 'researcher_1', name: 'Researcher', prompt: 'Role: Researcher\nBoundary: collect >=12 high-credibility sources\nInput: paper topic + thesis contract\nOutput: JSON evidence pack\nFormat: org/title/year/url/type/claims_supported/fact\nRisk check: avoid homepage-only and placeholder refs\nCost cap: medium\nNo fabricated citations' },
+      { id: 'outliner', name: 'Outliner', prompt: 'Role: Thesis Planner\nBoundary: lock thesis, scope, and section budgets\nInput: user goal\nOutput: JSON writing contract\nFormat: exact headings + word budgets + citation plan\nRisk check: no prompt echo in final draft\nCost cap: low\nNo unsupported claims' },
+      { id: 'drafter', name: 'Drafter', prompt: 'Role: Synthesizer\nBoundary: write final essay only\nInput: contract + evidence pack\nOutput: markdown essay 1500-1900 words\nFormat: exact required headings, no abstract\nRisk check: >=8 in-text citations and traceable claims\nCost cap: medium\nNo fabricated citations' },
+      { id: 'reviser', name: 'Reviser', prompt: 'Role: Citation Editor\nBoundary: repair citation integrity\nInput: draft + source pack\nOutput: issues+patches JSON then revised draft\nFormat: concrete fix list\nRisk check: remove untraceable/weak refs\nCost cap: low\nList uncertainty gaps' },
       { id: 'exporter', name: 'Exporter', prompt: 'Role: Exporter\nBoundary: export final document\nInput: revised markdown\nOutput: docx + md paths\nFormat: absolute/repo path\nRisk check: verify filesize\nCost cap: low\nStop on write errors' },
-      { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: validate acceptance checks\nInput: docx+md outputs\nOutput: pass/fail matrix\nFormat: checklist\nRisk check: strict on docx existence\nCost cap: low\nNo ambiguous verdict' }
+      { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: strict gate decision\nInput: md+docx outputs\nOutput: pass/fail JSON + must-fix actions\nFormat: hard checks (word count/headings/sources/citations/placeholders)\nRisk check: fail if any hard check fails\nCost cap: low\nNo ambiguous verdict' }
     ];
     let roleAssignmentsByRole = Object.fromEntries(workflowRoles.map(r => [r.id, 'none']));
     let recommendedBundle = null;
@@ -873,22 +937,32 @@
         : '<span style="color:#86efac;">Prompt looks sufficiently specific. You can run now.</span>';
     }
 
-    function buildDetailedTemplate(goal) {
-      return `${goal}\n\nPlease follow these constraints:\n1) Thesis: [fill one-sentence argument]\n2) Scope: focus on trade, technology competition, and security/diplomacy in 2026\n3) Evidence: use at least 12 credible sources, including government/think-tank/economic datasets\n4) Structure: intro, 3 analytical sections, counterarguments, conclusion\n5) Quality: include at least 2 counterarguments and 3 uncertainty/limitation points\n6) Output: 1500-2000 words, with references section and inline evidence links`;
+    function buildDetailedTemplate(_goal) {
+      return `Write a research essay on the relationship between China and US in 2026.
+
+Hard constraints (do not echo these instructions in final output):
+1) Output only the final essay markdown (no abstract, no instruction restatement)
+2) 1500-1900 words
+3) Use exact headings: Introduction / Section 1 / Section 2 / Section 3 / Counterarguments and Limitations / Conclusion / Works Cited
+4) Use at least 10 high-credibility sources and at least 8 in-text citations
+5) Every major factual claim must map to a cited source
+6) Works Cited entries must be: Organization — Title — Year — URL
+7) Include at least 2 counterarguments and 2 limitations
+8) Avoid placeholder citations and generic homepage-only references`;
     }
 
     function defaultWorkflowBundle() {
       const roles = [
-        { id: 'researcher_1', name: 'Researcher 1', prompt: 'Role: Researcher\nBoundary: gather evidence only\nInput: user goal\nOutput: bullets with sources\nFormat: concise\nRisk check: highlight uncertainty\nCost cap: medium\nNo secrets in output' },
-        { id: 'synthesizer', name: 'Synthesizer', prompt: 'Role: Synthesizer\nBoundary: merge inputs only\nInput: research outputs\nOutput: structured summary\nFormat: sections + bullets\nRisk check: list assumptions\nCost cap: low\nNo new claims without source' },
-        { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: evaluate quality\nInput: final draft\nOutput: pass/fail + checks\nFormat: checklist\nRisk check: cite missing evidence\nCost cap: low\nNo secrets in report' },
+        { id: 'researcher_1', name: 'Researcher 1', prompt: 'Role: Researcher\nBoundary: produce evidence pack only\nInput: goal + thesis contract\nOutput: JSON sources with org/title/year/url/type/claim mapping\nFormat: JSON only\nRisk check: no placeholder refs or homepage-only links\nCost cap: medium\nNo fabricated citations' },
+        { id: 'synthesizer', name: 'Synthesizer', prompt: 'Role: Synthesizer\nBoundary: write final essay only\nInput: evidence pack + section contract\nOutput: markdown essay 1500-1900 words\nFormat: exact required headings + Works Cited\nRisk check: >=8 in-text citations and no prompt echo\nCost cap: medium\nNo unsupported claims' },
+        { id: 'qa_judge', name: 'QA Judge', prompt: 'Role: QA Judge\nBoundary: strict gate\nInput: final draft\nOutput: pass/fail + must-fix actions\nFormat: JSON checklist\nRisk check: fail on heading/word/source/citation violations\nCost cap: low\nNo ambiguous verdict' },
         { id: 'executor', name: 'Executor', prompt: 'Role: Executor\nBoundary: execute approved steps\nInput: plan json\nOutput: logs + artifacts\nFormat: step records\nRisk check: verify file outputs\nCost cap: low\nStop on policy conflict' },
       ];
       const roleMap = { researcher_1: 'chatgpt-api:gpt-4o-mini', synthesizer: 'chatgpt-api:gpt-4o-mini', qa_judge: 'anthropic:sonnet', executor: 'none' };
       const stages = [
-        { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini','deepseek:local'], mergePolicy: 'none', notes: 'collect evidence', roleId: 'researcher_1' },
-        { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'merge and write', roleId: 'synthesizer' },
-        { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'quality gate', roleId: 'qa_judge' },
+        { id: 's1', type: 'research', agents: ['chatgpt-api:gpt-4o-mini','deepseek:local'], mergePolicy: 'none', notes: 'collect evidence pack with claim mapping (deliberate pass)', roleId: 'researcher_1' },
+        { id: 's2', type: 'synth', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'draft with exact heading/word/citation contract + self-check pass', roleId: 'synthesizer' },
+        { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'strict gate and actionable fixes', roleId: 'qa_judge' },
       ];
       return { stages, roles, roleAssignmentsByRole: roleMap, explainWhy: 'Default research->synth->qa pipeline balances evidence gathering, summary quality, and validation.', costHint: 'medium' };
     }
@@ -907,17 +981,17 @@
       const mkRole = (id, name, lines) => ({ id, name, prompt: lines.join('\n') });
       if (type === 'research_writing') {
         const roles = [
-          mkRole('researcher_a','Researcher A',['Role: Researcher A','Boundary: collect factual sources','Input: goal text','Output: evidence bullets + links','Format: concise list','Risk check: uncertainty flag','Cost cap: medium','No secrets/log leaks']),
-          mkRole('researcher_b','Researcher B',['Role: Researcher B','Boundary: gather counterpoints','Input: goal text','Output: opposing evidence','Format: bullets + caveats','Risk check: bias check','Cost cap: medium','No secrets/log leaks']),
-          mkRole('synthesizer','Synthesizer',['Role: Synthesizer','Boundary: merge outputs','Input: research outputs','Output: coherent draft','Format: sections + table','Risk check: cite uncertainty','Cost cap: low','No unsupported claims']),
-          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: evaluate quality','Input: final draft','Output: pass/fail + checks','Format: checklist','Risk check: missing refs','Cost cap: low','Stop on weak evidence']),
+          mkRole('researcher_a','Researcher A',['Role: Researcher A','Boundary: collect primary factual sources','Input: goal text + thesis scope','Output: JSON evidence pack with source metadata','Format: org/title/year/url/type/claim mapping','Risk check: avoid homepages/placeholders','Cost cap: medium','No secrets/log leaks']),
+          mkRole('researcher_b','Researcher B',['Role: Researcher B','Boundary: gather counter-evidence and limitations','Input: goal text + thesis scope','Output: JSON opposing evidence with uncertainty tags','Format: evidence list + caveats','Risk check: bias check + source quality','Cost cap: medium','No secrets/log leaks']),
+          mkRole('synthesizer','Synthesizer',['Role: Synthesizer','Boundary: write final essay only','Input: both evidence packs','Output: coherent essay draft 1500-1900 words','Format: exact required headings + Works Cited','Risk check: >=8 in-text citations and no prompt echo','Cost cap: medium','No unsupported claims']),
+          mkRole('qa_judge','QA Judge',['Role: QA Judge','Boundary: strict gate + revision advice','Input: final draft','Output: pass/fail + must-fix actions','Format: hard-check checklist','Risk check: heading/word/source/citation integrity','Cost cap: low','Stop on weak evidence']),
         ];
         return {
           stages: [
-            { id:'s1', type:'research', agents:['deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'parallel evidence collection', roleId:'researcher_a' },
-            { id:'s2', type:'research', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'counterarguments', roleId:'researcher_b' },
-            { id:'s3', type:'synth', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'merge findings', roleId:'synthesizer' },
-            { id:'s4', type:'qa', agents:['anthropic:sonnet'], mergePolicy:'judge', notes:'quality gate', roleId:'qa_judge' },
+            { id:'s1', type:'research', agents:['deepseek:local','chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'parallel evidence collection (deliberate pass)', roleId:'researcher_a' },
+            { id:'s2', type:'research', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'none', notes:'counterarguments + limitations evidence', roleId:'researcher_b' },
+            { id:'s3', type:'synth', agents:['chatgpt-api:gpt-4o-mini'], mergePolicy:'summary', notes:'draft with exact contract + self-check before output', roleId:'synthesizer' },
+            { id:'s4', type:'qa', agents:['anthropic:sonnet'], mergePolicy:'judge', notes:'strict quality gate and concrete fixes', roleId:'qa_judge' },
           ],
           roles,
           roleAssignmentsByRole: { researcher_a:'chatgpt-api:gpt-4o-mini', researcher_b:'deepseek:local', synthesizer:'chatgpt-api:gpt-4o-mini', qa_judge:'anthropic:sonnet' },
@@ -1146,11 +1220,11 @@
         return;
       }
       runsList.innerHTML = view.map(r => `
-        <div class="run-card ${r.id === selectedRunId ? 'selected' : ''}" data-id="${r.id}">
+        <div class="run-card ${r.id === selectedRunId ? 'selected' : ''} ${r.status === 'running' ? 'running-live' : ''}" data-id="${r.id}">
           <div class="run-header">
             <span class="run-goal" title="${escapeHtml(r.goal)}">${escapeHtml(r.goal)}</span>
             <span>
-              <span class="run-status ${statusClass(r.status)}">${r.status}</span>
+              <span class="run-status ${statusClass(r.status)}">${r.status}${r.status === 'running' ? ' · live' : ''}</span>
               ${r.status === 'done' && (r.docxPath || r.exportMdPath) ? `<button class="open-output-btn" data-open-output="${r.id}" title="${escapeHtml(r.docxPath || r.exportMdPath)}">Open Final Essay</button>` : ''}
               ${r.status === 'done' ? `<button class="open-output-btn" data-open-output-folder="${r.id}" title="Reveal final essay file in Finder">Show Final in Finder</button>` : ''}
             </span>
@@ -1211,6 +1285,10 @@
 
       let content = '';
       if (run.error) content += `<div class="error-msg">${escapeHtml(run.error)}</div>`;
+      const logsText = Array.isArray(run.logs) ? run.logs.join('\n') : '';
+      if (/LLM provider=fake/i.test(logsText)) {
+        content += `<div style="background:#5b1f1f;color:#fee2e2;border:1px solid #7f1d1d;padding:10px;border-radius:8px;margin:8px 0;"><strong>Quality warning:</strong> this run used <code>fake</code> provider. Output is likely low-fidelity demo content. Configure a real provider (OpenAI/Anthropic/DeepSeek/Ollama) for production-quality essays.</div>`;
+      }
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
       if (Array.isArray(run.config?.workflowStages)) {
         const list = run.config.workflowStages.map((s, i) => `${i+1}. ${s.id} (${s.type}) agents=${(s.agents||[]).join(',')} merge=${s.mergePolicy}`).join('\n');
@@ -1225,7 +1303,7 @@
       const docxExists = !!run.artifacts?.docxExists;
       const tdRaw = run.artifacts?.top_delta_raw || run.top_delta_raw || run.top_delta || null;
       const tdEff = run.artifacts?.top_delta_effective || run.top_delta_effective || tdRaw;
-      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}</p>`;
+      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Citation Quality Score:</strong> ${escapeHtml(String(run.artifacts?.citation_quality_score ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}</p>`;
       const unsupportedSample = Array.isArray(run.artifacts?.unsupported_claims_sample) ? run.artifacts.unsupported_claims_sample : [];
       if (unsupportedSample.length) {
         const sortedSample = [...unsupportedSample].sort((a, b) => Number(b.missing_link_count ?? 0) - Number(a.missing_link_count ?? 0));
@@ -1233,9 +1311,11 @@
           const missing = Number(c.missing_link_count ?? 1);
           const rowBg = missing >= 1 ? 'background:rgba(127,29,29,0.28);' : '';
           const missingColor = missing >= 1 ? 'color:#fca5a5;font-weight:700;' : '';
-          return `<tr data-unsupported-row="1" data-link-count="${escapeHtml(String(c.link_count ?? 0))}" data-missing-count="${escapeHtml(String(missing))}" style="${rowBg}"><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${idx + 1}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.section || 'draft'))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.text || '').slice(0, 180))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.link_count ?? 0))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;${missingColor}">${escapeHtml(String(missing))}</td></tr>`;
+          const actionText = missing >= 1 ? 'needs source' : 'linked';
+          const actionStyle = missing >= 1 ? 'color:#fda4af;font-weight:700;' : 'color:#86efac;';
+          return `<tr data-unsupported-row="1" data-link-count="${escapeHtml(String(c.link_count ?? 0))}" data-missing-count="${escapeHtml(String(missing))}" style="${rowBg}"><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${idx + 1}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.section || 'draft'))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.text || '').slice(0, 180))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.link_count ?? 0))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;${missingColor}">${escapeHtml(String(missing))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;${actionStyle}">${actionText}</td></tr>`;
         }).join('');
-        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="clear-btn" data-focus-unsupported-toggle="off">Focus unsupported claims (0 links)</button><span style="font-size:.74rem;color:#98a2b8;">Shows the weakest claims first.</span><span style="font-size:.74rem;color:#b7c1d6;" data-unsupported-counter>Showing ${sortedSample.length}/${sortedSample.length}</span><span style="font-size:.72rem;color:#fca5a5;border:1px solid #55363a;border-radius:999px;padding:2px 8px;background:rgba(127,29,29,0.18);">Legend: highlighted rows = missing evidence links</span></div><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="clear-btn" data-focus-unsupported-toggle="off">Focus unsupported claims (0 links)</button><button class="clear-btn" data-action-needs-source-toggle="off">Show only needs source</button><button class="clear-btn" data-build-revision-brief>Build failed-claims revision brief</button><button class="clear-btn" data-use-revision-brief>Use brief as next run goal</button><span style="font-size:.74rem;color:#98a2b8;">Shows the weakest claims first.</span><span style="font-size:.74rem;color:#b7c1d6;" data-unsupported-counter>Showing ${sortedSample.length}/${sortedSample.length}</span><span style="font-size:.72rem;color:#fca5a5;border:1px solid #55363a;border-radius:999px;padding:2px 8px;background:rgba(127,29,29,0.18);">Legend: highlighted rows = missing evidence links</span></div><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Action</th></tr></thead><tbody>${rows}</tbody></table></div><pre data-revision-brief style="display:none;margin-top:8px;background:#0b0f16;border:1px solid #2a3447;padding:8px;border-radius:8px;white-space:pre-wrap;font-size:.75rem;"></pre></details>`;
       }
       if (j2?.must_fix_gate === false) {
         content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
@@ -1300,27 +1380,100 @@
           }
         });
       });
+      const applyUnsupportedFilters = () => {
+        const rows = Array.from(detailContent.querySelectorAll('tr[data-unsupported-row="1"]'));
+        const focusBtn = detailContent.querySelector('[data-focus-unsupported-toggle]');
+        const actionBtn = detailContent.querySelector('[data-action-needs-source-toggle]');
+        const counter = detailContent.querySelector('[data-unsupported-counter]');
+        const focusOn = focusBtn && focusBtn.dataset.focusUnsupportedToggle === 'on';
+        const actionOn = actionBtn && actionBtn.dataset.actionNeedsSourceToggle === 'on';
+        rows.forEach((r) => {
+          const links = Number(r.getAttribute('data-link-count') || '0');
+          const actionCell = String((r.lastElementChild?.textContent || '')).trim().toLowerCase();
+          const keepByFocus = !focusOn || links === 0;
+          const keepByAction = !actionOn || actionCell === 'needs source';
+          r.style.display = (keepByFocus && keepByAction) ? '' : 'none';
+        });
+        if (counter) {
+          const shown = rows.filter((r) => r.style.display !== 'none').length;
+          counter.textContent = `Showing ${shown}/${rows.length}`;
+        }
+      };
+
+      const runFilterState = unsupportedFilterStateByRun[run.id] || { focus: false, needsSourceOnly: false };
+      const focusBtn = detailContent.querySelector('[data-focus-unsupported-toggle]');
+      const actionBtn = detailContent.querySelector('[data-action-needs-source-toggle]');
+      if (focusBtn) {
+        focusBtn.dataset.focusUnsupportedToggle = runFilterState.focus ? 'on' : 'off';
+        focusBtn.textContent = runFilterState.focus ? 'Show all unsupported claims' : 'Focus unsupported claims (0 links)';
+      }
+      if (actionBtn) {
+        actionBtn.dataset.actionNeedsSourceToggle = runFilterState.needsSourceOnly ? 'on' : 'off';
+        actionBtn.textContent = runFilterState.needsSourceOnly ? 'Show all actions' : 'Show only needs source';
+      }
+      applyUnsupportedFilters();
+
       detailContent.querySelectorAll('[data-focus-unsupported-toggle]').forEach(btn => {
         btn.addEventListener('click', () => {
           const isOn = btn.dataset.focusUnsupportedToggle === 'on';
+          btn.dataset.focusUnsupportedToggle = isOn ? 'off' : 'on';
+          btn.textContent = isOn ? 'Focus unsupported claims (0 links)' : 'Show all unsupported claims';
+          unsupportedFilterStateByRun[run.id] = {
+            ...(unsupportedFilterStateByRun[run.id] || {}),
+            focus: !isOn,
+          };
+          applyUnsupportedFilters();
+        });
+      });
+      detailContent.querySelectorAll('[data-action-needs-source-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const isOn = btn.dataset.actionNeedsSourceToggle === 'on';
+          btn.dataset.actionNeedsSourceToggle = isOn ? 'off' : 'on';
+          btn.textContent = isOn ? 'Show only needs source' : 'Show all actions';
+          unsupportedFilterStateByRun[run.id] = {
+            ...(unsupportedFilterStateByRun[run.id] || {}),
+            needsSourceOnly: !isOn,
+          };
+          applyUnsupportedFilters();
+        });
+      });
+      detailContent.querySelectorAll('[data-build-revision-brief]').forEach(btn => {
+        btn.addEventListener('click', async () => {
           const rows = Array.from(detailContent.querySelectorAll('tr[data-unsupported-row="1"]'));
-          const counter = detailContent.querySelector('[data-unsupported-counter]');
-          const total = rows.length;
-          if (!isOn) {
-            rows.forEach((r) => {
-              const links = Number(r.getAttribute('data-link-count') || '0');
-              r.style.display = links === 0 ? '' : 'none';
+          const failed = rows.filter((r) => String((r.lastElementChild?.textContent || '')).trim().toLowerCase() === 'needs source')
+            .slice(0, 8)
+            .map((r) => {
+              const cells = r.querySelectorAll('td');
+              return `- [${cells[1]?.textContent?.trim() || 'draft'}] ${cells[2]?.textContent?.trim() || ''}`;
             });
-            const shown = rows.filter((r) => r.style.display !== 'none').length;
-            if (counter) counter.textContent = `Showing ${shown}/${total}`;
-            btn.dataset.focusUnsupportedToggle = 'on';
-            btn.textContent = 'Show all unsupported claims';
-          } else {
-            rows.forEach((r) => { r.style.display = ''; });
-            if (counter) counter.textContent = `Showing ${total}/${total}`;
-            btn.dataset.focusUnsupportedToggle = 'off';
-            btn.textContent = 'Focus unsupported claims (0 links)';
+          const brief = detailContent.querySelector('[data-revision-brief]');
+          const text = [
+            'Revise only failed claims (needs source):',
+            ...failed,
+            '',
+            'Rules: keep structure unchanged; add in-text citations for each listed claim; update Works Cited with high-credibility deep links only.'
+          ].join('\n');
+          if (brief) {
+            brief.style.display = '';
+            brief.textContent = text;
+            brief.dataset.revisionBriefText = text;
           }
+          if (navigator.clipboard?.writeText) {
+            try { await navigator.clipboard.writeText(text); } catch {}
+          }
+        });
+      });
+      detailContent.querySelectorAll('[data-use-revision-brief]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const brief = detailContent.querySelector('[data-revision-brief]');
+          const text = String(brief?.dataset?.revisionBriefText || brief?.textContent || '').trim();
+          if (!text) {
+            alert('Build revision brief first.');
+            return;
+          }
+          goalInput.value = text;
+          goalInput.focus();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         });
       });
     }
