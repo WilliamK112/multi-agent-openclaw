@@ -90,6 +90,8 @@ type RunRecord = {
     unique_domains?: number;
     duplicate_ratio?: number;
     facts_count?: number;
+    evidenceBundlePath?: string;
+    unsupported_claims_count?: number;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -513,6 +515,64 @@ function evaluateWorksCited(md: string) {
 }
 
 
+function buildEvidenceBundleFromMarkdown(runId: string, md: string, researchText: string) {
+  const sourceLines = (md.match(/##\s+(Works Cited|Sources)\n([\s\S]*?)(\n##\s+|$)/i)?.[2] || "")
+    .split(/\n+/)
+    .map((x) => x.trim())
+    .filter((x) => x.startsWith("- "));
+
+  const sources = sourceLines.map((line, idx) => {
+    const url = line.match(/https?:\/\/[^\s)]+/)?.[0];
+    return {
+      id: `src_${idx + 1}`,
+      title: line.slice(2, 180),
+      url,
+      excerpt: "",
+      reliability: "medium" as const,
+    };
+  });
+
+  const claimCandidates = md
+    .split(/\n+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 40 && !x.startsWith("#") && !x.startsWith("- "))
+    .slice(0, 12);
+
+  const claims = claimCandidates.map((text, idx) => ({
+    id: `claim_${idx + 1}`,
+    text,
+    section: "draft",
+    confidence: "medium" as const,
+  }));
+
+  const links = claims
+    .filter((c) => /\([^)]+\d{4}[^)]*\)|\[[0-9]+\]|https?:\/\//i.test(c.text))
+    .map((c, idx) => ({
+      id: `link_${idx + 1}`,
+      claimId: c.id,
+      sourceId: sources[idx % Math.max(1, sources.length)]?.id ?? "src_1",
+      rationale: "Detected in-text citation or URL in claim sentence",
+      strength: "partial" as const,
+    }));
+
+  return {
+    runId,
+    sources,
+    claims,
+    links,
+    artifacts: [
+      {
+        id: `artifact_evidence_${runId}`,
+        runId,
+        stage: "qa",
+        type: "evidence-report" as const,
+        path: `docs/exports/${runId}.evidence.json`,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
 function imageProviderAvailability() {
   return {
     wikimedia: { enabled: true, reason: "no_key_needed" },
@@ -916,6 +976,17 @@ async function continueRun(runId: string) {
       pushLog(run, "export:docx_kept_even_when_gate_failed");
     }
     await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
+
+    const evidenceBundle = validateWorkflowEvidenceBundle(buildEvidenceBundleFromMarkdown(run.id, finalMdText, researchText));
+    const unsupportedClaims = findUnsupportedClaims(evidenceBundle);
+    const evidenceBundlePath = path.join(process.cwd(), `docs/exports/${run.id}.evidence.json`);
+    await fsp.writeFile(
+      evidenceBundlePath,
+      JSON.stringify({ ...evidenceBundle, unsupportedClaims }, null, 2),
+      "utf8"
+    ).catch(() => undefined);
+    pushLog(run, `evidence_bundle: claims=${evidenceBundle.claims.length} sources=${evidenceBundle.sources.length} unsupported=${unsupportedClaims.length}`);
+
     run.artifacts = {
       ...(run.artifacts ?? {}),
       docxPath: docxExists ? expectedDocx : null,
@@ -949,6 +1020,8 @@ async function continueRun(runId: string) {
       unique_domains: uniqueDomains,
       duplicate_ratio: Number(duplicateRatio.toFixed(4)),
       facts_count: factsCount,
+      evidenceBundlePath,
+      unsupported_claims_count: unsupportedClaims.length,
       exportStatus: docxExists ? (gatePassed ? "exported" : "exported_with_gate_fail") : "draft_only_not_exported",
     };
     pushLog(run, docxExists ? `export:docx_path=${expectedDocx}` : "export:skipped_not_exported_due_to_gate_fail");
@@ -1272,6 +1345,8 @@ app.get("/runs", (req, res) => {
       duplicate_ratio: r.artifacts?.duplicate_ratio ?? null,
       facts_count: r.artifacts?.facts_count ?? null,
       repeat_flags: r.artifacts?.repeat_flags ?? null,
+      evidenceBundlePath: r.artifacts?.evidenceBundlePath ?? null,
+      unsupported_claims_count: r.artifacts?.unsupported_claims_count ?? null,
     }));
 
   return res.json(list);
@@ -1369,6 +1444,17 @@ async function resolveOutputPathByRunId(runId: string) {
 
 app.get("/runs/:runId/output-file", async (req, res) => {
   const resolved = await resolveOutputPathByRunId(req.params.runId);
+  if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
+  return res.download(resolved.real, path.basename(resolved.real));
+});
+
+app.get("/runs/:runId/evidence-file", async (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const evidencePath = run.artifacts?.evidenceBundlePath;
+  if (!evidencePath) return res.status(404).json({ error: "Evidence bundle not found" });
+
+  const resolved = await resolveWhitelistedOutputPathByPath(evidencePath, run);
   if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
   return res.download(resolved.real, path.basename(resolved.real));
 });

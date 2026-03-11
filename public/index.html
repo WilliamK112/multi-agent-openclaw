@@ -524,6 +524,18 @@
       return res.json();
     }
 
+    async function openEvidenceFile(runId) {
+      const fileUrl = `${API}/runs/${runId}/evidence-file`;
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return { ok: true, mode: 'browser', url: fileUrl };
+    }
+
     function statusClass(s) {
       return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
     }
@@ -1145,7 +1157,7 @@
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
           <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -1213,7 +1225,7 @@
       const docxExists = !!run.artifacts?.docxExists;
       const tdRaw = run.artifacts?.top_delta_raw || run.top_delta_raw || run.top_delta || null;
       const tdEff = run.artifacts?.top_delta_effective || run.top_delta_effective || tdRaw;
-      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}</p>`;
+      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}</p>`;
       if (j2?.must_fix_gate === false) {
         content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
       }
@@ -1221,6 +1233,9 @@
         content += `<p><strong>DOCX:</strong> <code>${escapeHtml(docxPath)}</code> <button class="open-output-btn" ${docxExists?'':'disabled title="File not found"'} data-open-output-detail="${escapeHtml(run.id)}">Open DOCX</button> ${docxExists?'':'<span style="color:#fca5a5;">File not found</span>'}</p>`;
       } else if (j2?.must_fix_gate === false) {
         content += `<p style="color:#fca5a5;"><strong>Not exported because gate failed.</strong> Draft only / not exported.</p>`;
+      }
+      if (run.artifacts?.evidenceBundlePath) {
+        content += `<p><strong>Evidence Bundle:</strong> <code>${escapeHtml(String(run.artifacts.evidenceBundlePath))}</code> <button class="open-output-btn" data-open-evidence-detail="${escapeHtml(run.id)}">Open Evidence JSON</button></p>`;
       }
       if (j1 || j2) {
         const dims = ['thesis_prompt','structure_coherence','evidence_specificity','counterarguments_nuance','clarity_style','citations_integrity'];
@@ -1260,6 +1275,15 @@
         el.addEventListener('click', async () => {
           try {
             await openRunOutput(el.dataset.openOutputDetail);
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
+      detailContent.querySelectorAll('[data-open-evidence-detail]').forEach(el => {
+        el.addEventListener('click', async () => {
+          try {
+            await openEvidenceFile(el.dataset.openEvidenceDetail);
           } catch (e) {
             alert(e.message);
           }
