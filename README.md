@@ -17,19 +17,17 @@ This branch is now evolving from a pure workflow UI into a **task-aware orchestr
 
 ## Screenshots
 
-> Add real screenshots here.
+### Agents and Role Assignment
+![Agents and Role Assignment](picture/Agents%20and%20role%20assign.png)
 
-- Role Assignment  
-  `![Role Assignment](docs/screenshots/role-assignment.png)`
+### Workflow Builder
+![Workflow Builder](picture/Work%20flow%20builder.png)
 
-- Workflow Builder  
-  `![Workflow Builder](docs/screenshots/workflow-builder.png)`
+### Recommended Workflow Based on Task
+![Recommended Workflow Based on Task](picture/REcommended%20work%20flow%20base%20on%20task.png)
 
-- Recommendation + Meeting Room  
-  `![Recommendation + Meeting Room](docs/screenshots/recommendation-meeting-room.png)`
-
-- Results / Final Output  
-  `![Results](docs/screenshots/results.png)`
+### Workflow Display
+![Workflow Display](picture/Workflow%20display.png)
 
 ## Why this project
 
