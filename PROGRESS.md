@@ -81,3 +81,24 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: this makes QA gating more actionable by showing not only which claims are unsupported, but exactly how far each is from minimum evidence linkage.
 - Self-check: yes, this is a direct improvement to workflow-first, evidence-backed research/writing inspectability.
 - Next immediate step: add a one-click “focus unsupported claims” filter in run details to isolate weakest claims during revision.
+
+## 2026-03-11 (heartbeat 05:48)
+
+- Added one-click unsupported-claim focus mode in run details (`public/index.html`):
+  - Unsupported claims are now sorted by `missing_link_count` descending for triage-first review.
+  - Added **Focus unsupported claims (0 links)** toggle button in the Unsupported Claim Breakdown panel.
+  - Toggle hides rows that already have at least one link, isolating weakest claims for revision.
+- Verification: `npm test` passed.
+- Why this matters: this reduces review friction by surfacing the highest-risk unsupported claims first, improving workflow-first evidence remediation speed.
+- Self-check: yes, this directly improves the evidence-backed QA/revision loop for research-writing workflows.
+- Next immediate step: add a small inline counter (shown/total focused claims) to make filter state explicit during review.
+
+## 2026-03-11 (heartbeat 06:18)
+
+- Added inline unsupported-claim focus state counter in run details (`public/index.html`):
+  - Added `Showing X/Y` counter beside the focus toggle in Unsupported Claim Breakdown.
+  - Counter now updates dynamically when toggling between focused view (0-link claims) and full view.
+- Verification: `npm test` passed.
+- Why this matters: makes review state explicit so QA/revision loops are faster and less error-prone when triaging unsupported claims.
+- Self-check: yes, this directly improves workflow-first evidence inspection clarity during research-writing review.
+- Next immediate step: add quick row highlighting for highest missing-link claims to improve scan speed.

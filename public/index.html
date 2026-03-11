@@ -1228,8 +1228,9 @@
       content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}</p>`;
       const unsupportedSample = Array.isArray(run.artifacts?.unsupported_claims_sample) ? run.artifacts.unsupported_claims_sample : [];
       if (unsupportedSample.length) {
-        const rows = unsupportedSample.map((c, idx) => `<tr><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${idx + 1}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.section || 'draft'))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.text || '').slice(0, 180))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.link_count ?? 0))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.missing_link_count ?? 1))}</td></tr>`).join('');
-        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+        const sortedSample = [...unsupportedSample].sort((a, b) => Number(b.missing_link_count ?? 0) - Number(a.missing_link_count ?? 0));
+        const rows = sortedSample.map((c, idx) => `<tr data-unsupported-row="1" data-link-count="${escapeHtml(String(c.link_count ?? 0))}" data-missing-count="${escapeHtml(String(c.missing_link_count ?? 1))}"><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${idx + 1}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.section || 'draft'))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.text || '').slice(0, 180))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.link_count ?? 0))}</td><td style="padding:4px 6px;border-bottom:1px solid #2f2f35;">${escapeHtml(String(c.missing_link_count ?? 1))}</td></tr>`).join('');
+        content += `<details style="margin:8px 0;"><summary><strong>Unsupported Claim Breakdown (sample)</strong></summary><div style="margin-top:6px;display:flex;gap:8px;align-items:center;"><button class="clear-btn" data-focus-unsupported-toggle="off">Focus unsupported claims (0 links)</button><span style="font-size:.74rem;color:#98a2b8;">Shows the weakest claims first.</span><span style="font-size:.74rem;color:#b7c1d6;" data-unsupported-counter>Showing ${sortedSample.length}/${sortedSample.length}</span></div><div style="margin-top:6px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;"><thead><tr><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">#</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Section</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Claim text (truncated)</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Links</th><th align="left" style="padding:4px 6px;border-bottom:1px solid #3f3f46;">Missing</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
       }
       if (j2?.must_fix_gate === false) {
         content += `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #991b1b;padding:10px;border-radius:8px;margin:8px 0;"><strong>Gate Failed</strong><ul style="margin:6px 0 0 18px;">${(gateReasons.length?gateReasons:['unknown']).map(r=>`<li>${escapeHtml(String(r))}</li>`).join('')}</ul></div>`;
@@ -1291,6 +1292,29 @@
             await openEvidenceFile(el.dataset.openEvidenceDetail);
           } catch (e) {
             alert(e.message);
+          }
+        });
+      });
+      detailContent.querySelectorAll('[data-focus-unsupported-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const isOn = btn.dataset.focusUnsupportedToggle === 'on';
+          const rows = Array.from(detailContent.querySelectorAll('tr[data-unsupported-row="1"]'));
+          const counter = detailContent.querySelector('[data-unsupported-counter]');
+          const total = rows.length;
+          if (!isOn) {
+            rows.forEach((r) => {
+              const links = Number(r.getAttribute('data-link-count') || '0');
+              r.style.display = links === 0 ? '' : 'none';
+            });
+            const shown = rows.filter((r) => r.style.display !== 'none').length;
+            if (counter) counter.textContent = `Showing ${shown}/${total}`;
+            btn.dataset.focusUnsupportedToggle = 'on';
+            btn.textContent = 'Show all unsupported claims';
+          } else {
+            rows.forEach((r) => { r.style.display = ''; });
+            if (counter) counter.textContent = `Showing ${total}/${total}`;
+            btn.dataset.focusUnsupportedToggle = 'off';
+            btn.textContent = 'Focus unsupported claims (0 links)';
           }
         });
       });
