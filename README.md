@@ -20,9 +20,6 @@ This branch is now evolving from a pure workflow UI into a **task-aware orchestr
 ### Agents and Role Assignment
 ![Agents and Role Assignment](picture/Agents%20and%20role%20assign.png)
 
-### Workflow Builder
-![Workflow Builder](picture/Work%20flow%20builder.png)
-
 ### Recommended Workflow Based on Task
 ![Recommended Workflow Based on Task](picture/REcommended%20work%20flow%20base%20on%20task.png)
 
