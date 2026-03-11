@@ -16,18 +16,14 @@ This branch is now evolving from a pure workflow UI into a **task-aware orchestr
 - **New API endpoint**: `GET /memory/contexts` for recent context retrieval
 
 ## Screenshots
-
+### Workflow Display
+![Workflow Display](picture/Workflow%20display.png)
 ### Agents and Role Assignment
 ![Agents and Role Assignment](picture/Agents%20and%20role%20assign.png)
-
 ### Recommended Workflow Based on Task
 ![Recommended Workflow Based on Task](picture/REcommended%20work%20flow%20base%20on%20task.png)
 
-### Workflow Display
-![Workflow Display](picture/Workflow%20display.png)
-
 ## Why this project
-
 - Turn one-shot prompts into **structured execution pipelines**.
 - Keep control with **local-first run flow** and explicit output files.
 - Improve output quality with **prompt clarity checks + staged QA**.
