@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "tsx --test test/*.test.js test/*.test.ts",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "check:provider": "node scripts/provider-check.mjs",

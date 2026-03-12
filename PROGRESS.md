@@ -390,3 +390,15 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: makes reranking decisions inspectable without affecting default output payloads in normal mode.
 - Self-check: yes, this is a small, direct quality/observability improvement for Phase 4 retrieval behavior.
 - Next immediate step: add a compact unit test for `reorderSearchHits(...)` to lock in recency+task-boost ordering behavior.
+
+## 2026-03-12 (heartbeat 05:22)
+
+- Added **reorder behavior unit tests** and TS test execution support:
+  - Updated test script to `tsx --test test/*.test.js test/*.test.ts` (`package.json`).
+  - Added `test/retrieval.test.ts` with two targeted assertions for `reorderSearchHits(...)`:
+    - Recency preference when base relevance is tied.
+    - Task-type alignment boost for programming queries.
+- Verification: `npm test` passed (3 tests).
+- Why this matters: locks in core Phase 4 ranking behavior and reduces regression risk while iterating on retrieval heuristics.
+- Self-check: yes, this is a focused, shippable quality safeguard aligned with the roadmap.
+- Next immediate step: add a small guard test for empty/untimestamped hits to ensure stable sorting fallback behavior.
