@@ -44,3 +44,14 @@ test("reorderSearchHits: keeps stable order for untimestamped equal-score hits",
     ["a", "b", "c"],
   );
 });
+
+test("reorderSearchHits: returns empty array for empty input without mutating", () => {
+  const input: RetrievalHit[] = [];
+  const snapshot = [...input];
+
+  const out = reorderSearchHits(input, "anything");
+
+  assert.deepEqual(out, []);
+  assert.deepEqual(input, snapshot);
+  assert.notEqual(out, input);
+});

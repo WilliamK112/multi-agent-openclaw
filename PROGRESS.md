@@ -412,3 +412,13 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: protects deterministic ordering for edge cases where recency metadata is missing or invalid.
 - Self-check: yes, this is a narrow, high-signal regression guard for Phase 4 reorder stability.
 - Next immediate step: add a tiny unit test confirming empty-hit input returns an empty array without mutation.
+
+## 2026-03-12 (heartbeat 06:22)
+
+- Added **empty-input reorder guard test** in `test/retrieval.test.ts`:
+  - New assertion verifies `reorderSearchHits([])` returns `[]`.
+  - Added explicit non-mutation check for empty-array input (input remains unchanged and output is a distinct array).
+- Verification: `npm test` passed (5 tests).
+- Why this matters: locks in safe edge-case behavior and prevents accidental regressions in early-return logic.
+- Self-check: yes, this is a small, focused reliability improvement aligned with ongoing Phase 4 test hardening.
+- Next immediate step: add a tiny test for `RETRIEVAL_DEBUG_SCORES=1` to ensure debug fields include `recencyNorm` and `taskBoost` after reorder.
