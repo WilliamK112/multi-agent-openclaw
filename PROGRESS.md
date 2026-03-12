@@ -324,3 +324,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: formal contracts reduce stage handoff ambiguity and provide a clear path for runtime validation and safer revision loops.
 - Self-check: yes, this is a small, high-leverage architecture quality step aligned with roadmap priorities.
 - Next immediate step: Revision checkpoints (stage snapshots + diff summaries on QA fail).
+
+## 2026-03-12 (heartbeat 00:22)
+
+- Implemented **Revision checkpoints** in run artifacts (`src/server.ts`):
+  - Added `revisionCheckpoints` artifact schema to run record typing.
+  - On QA gate fail, now persist checkpoint entry with stage snapshots (`draft/final/judge-v1/judge-v2` paths) and diff summary (`overallDelta`, top deltas).
+  - Checkpoints are empty when gate passes.
+- Verification: `npm test` passed.
+- Why this matters: creates auditable QA-fail snapshots and a structured handoff for iterative revision/debug loops.
+- Self-check: yes, this is a focused architecture improvement that makes failure analysis faster and safer.
+- Next immediate step: Context update loop (feed retrieved context summary into planner prompt more explicitly).

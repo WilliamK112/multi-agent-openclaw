@@ -78,6 +78,19 @@ type RunRecord = {
     top_delta_effective?: { dimension: string | null; delta: number | null };
     gateReasons?: string[];
     revision_report?: any;
+    revisionCheckpoints?: Array<{
+      id: string;
+      type: string;
+      createdAt: string;
+      stage: string;
+      gateReasons: string[];
+      snapshots: Record<string, string>;
+      diffSummary: {
+        overallDelta: number;
+        topDeltaRaw: { dimension: string | null; delta: number | null };
+        topDeltaEffective: { dimension: string | null; delta: number | null };
+      };
+    }>;
     judge_v3?: any;
     repeat_flags?: boolean;
     repeat_details?: any;
@@ -1030,6 +1043,28 @@ async function continueRun(runId: string) {
       }
     }
     const gatePassed = Boolean(judge_v2?.must_fix_gate) && gateReasons.length === 0;
+    const revisionCheckpoints = !gatePassed
+      ? [
+          {
+            id: `cp_${run.id}_qa_fail`,
+            type: "qa_fail",
+            createdAt: new Date().toISOString(),
+            stage: "qa",
+            gateReasons,
+            snapshots: {
+              draftPath: expectedDraft,
+              finalPath: expectedMd,
+              judgeV1Path: path.join(process.cwd(), `docs/exports/${run.id}.judge.v1.json`),
+              judgeV2Path: path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`),
+            },
+            diffSummary: {
+              overallDelta: Number(judge_v2?.overall_score ?? 0) - Number(judge_v1?.overall_score ?? 0),
+              topDeltaRaw: top_delta_raw,
+              topDeltaEffective: top_delta_effective,
+            },
+          },
+        ]
+      : [];
     const docxExists = await fsp.stat(expectedDocx).then(() => true).catch(() => false);
     if (!gatePassed && docxExists) {
       pushLog(run, "export:docx_kept_even_when_gate_failed");
@@ -1058,6 +1093,7 @@ async function continueRun(runId: string) {
       top_delta_effective,
       gateReasons,
       revision_report,
+      revisionCheckpoints,
       judge_v3,
       judge_v1_rubric,
       judge_v2_rubric,
