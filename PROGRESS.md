@@ -453,3 +453,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: improves planner-hint observability in debug mode without polluting normal hint output.
 - Self-check: yes, this is a small, high-signal reliability/diagnostics improvement aligned with ongoing Phase 4 hardening.
 - Next immediate step: start website-online quality loop item by adding a lightweight `/healthz` endpoint + UI status check fallback path.
+
+## 2026-03-12 (heartbeat 08:39)
+
+- Implemented first **Website online quality loop** hardening slice across server + UI:
+  - Added `GET /healthz` in `src/server.ts` with structured readiness payload (`status`, `degraded`, provider/model, uptime, run count).
+  - Updated UI system check in `public/index.html` to call `/healthz` first and show **Connected / Degraded / Offline** explicitly.
+  - Added graceful fallback to `/runs?limit=1` when `/healthz` is unavailable so status still reflects partial availability.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` returned `200`.
+  - Local smoke check passed on fresh server: `/runs?limit=1` → `200`, `/healthz` returned readiness JSON.
+- Why this matters: status badge now reflects backend readiness quality (not just endpoint reachability), reducing false “connected” signals.
+- Self-check: yes, this directly advances the top-priority reliability item with a small shippable change.
+- Next immediate step: deploy this slice and wire status copy to include degraded cause text in run details panel as well.

@@ -136,8 +136,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 const publicDir = path.join(process.cwd(), "public");
+const serverStartedAt = Date.now();
 app.use(express.static(publicDir));
 app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+app.get("/healthz", (_req, res) => {
+  const provider = getProvider();
+  const model = getModel(provider);
+  const degraded = provider === "fake";
+  return res.json({
+    ok: true,
+    status: degraded ? "degraded" : "ready",
+    degraded,
+    provider,
+    model,
+    uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),
+    runCount: runs.size,
+    checkedAt: new Date().toISOString(),
+  });
+});
 
 const runs = new Map<string, RunRecord>();
 

@@ -1970,17 +1970,42 @@ Hard constraints (do not echo these instructions in final output):
 
     async function detectOpenClawActive() {
       try {
-        const res = await fetch(`${API}/runs?limit=1`);
-        if (!res.ok) throw new Error(String(res.status));
+        const healthRes = await fetch(`${API}/healthz`);
+        if (!healthRes.ok) throw new Error(String(healthRes.status));
+        const health = await healthRes.json();
         recommendBtn.disabled = false;
-        recommendStatusEl.textContent = 'Recommendation available';
+        if (health?.degraded) {
+          recommendStatusEl.textContent = `Recommendation available (degraded: ${health.provider || 'unknown'} provider)`;
+        } else {
+          recommendStatusEl.textContent = 'Recommendation available';
+        }
         if (systemStatusEl) {
-          systemStatusEl.textContent = 'System: Connected';
-          systemStatusEl.style.borderColor = '#2f6141';
-          systemStatusEl.style.background = '#13231a';
-          systemStatusEl.style.color = '#9ee6b1';
+          if (health?.degraded) {
+            systemStatusEl.textContent = `System: Degraded (${health.provider || 'unknown'})`;
+            systemStatusEl.style.borderColor = '#7a5d2b';
+            systemStatusEl.style.background = '#2a2212';
+            systemStatusEl.style.color = '#f3d596';
+          } else {
+            systemStatusEl.textContent = 'System: Connected';
+            systemStatusEl.style.borderColor = '#2f6141';
+            systemStatusEl.style.background = '#13231a';
+            systemStatusEl.style.color = '#9ee6b1';
+          }
         }
       } catch {
+        try {
+          const res = await fetch(`${API}/runs?limit=1`);
+          if (!res.ok) throw new Error(String(res.status));
+          recommendBtn.disabled = false;
+          recommendStatusEl.textContent = 'Recommendation available (health unknown)';
+          if (systemStatusEl) {
+            systemStatusEl.textContent = 'System: Connected (health unknown)';
+            systemStatusEl.style.borderColor = '#5a5a2a';
+            systemStatusEl.style.background = '#1f1f13';
+            systemStatusEl.style.color = '#efe7a0';
+          }
+          return;
+        } catch {}
         recommendBtn.disabled = true;
         recommendStatusEl.textContent = 'Recommendation offline';
         if (systemStatusEl) {
