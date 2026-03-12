@@ -6,6 +6,10 @@ import { fileRead, fileWrite } from "../skills/files";
 import { shellRun } from "../skills/shell";
 import { openclawAct } from "../skills/openclaw";
 import { cursorAct } from "../skills/cursor";
+import { generate } from "../llm/client";
+import type { ModelSpec } from "../llm/selector";
+import { selectExecutionModel } from "../llm/selector";
+import type { TaskType, Complexity } from "../domain/task";
 
 export type StepExecution = {
   stepId: string;
