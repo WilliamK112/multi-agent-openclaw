@@ -270,3 +270,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: improves inspectability of QA-to-revision handoff by making brief freshness/provenance explicit during long workflow-first review sessions.
 - Self-check: yes, this directly advances evidence-backed revision auditability without scope creep.
 - Next immediate step: add a tiny stale-age cue (e.g., “saved 2h ago”) to help reviewers prioritize regenerating outdated briefs.
+
+## 2026-03-11 (heartbeat 22:13)
+
+- Implemented **Phase 4: Reorder** in memory search (`src/memory/retrieval.ts`):
+  - Added `reorderSearchHits(hits)` to rerank by blended relevance + recency.
+  - Added timestamp-aware metadata in retrieval docs (`createdAtTs` for run contexts, `fileTs` for export-derived docs).
+  - Updated `searchMemory(...)` to apply reranking before truncating topK.
+- Verification: `npm test` passed.
+- Why this matters: improves retrieval quality for planning by favoring highly relevant and more recent context.
+- Self-check: yes, this directly advances Knox Phase 4 behavior with a small, shippable change.
+- Next immediate step: add `TaskSystem.run(goal, options)` abstraction in `src/orchestrator.ts`.

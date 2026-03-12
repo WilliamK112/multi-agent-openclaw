@@ -9,7 +9,7 @@ export type RetrievalDoc = {
   kind: "run_summary" | "source" | "claim" | "export";
   title: string;
   text: string;
-  metadata?: Record<string, string | number | boolean>;
+  metadata?: Record<string, string | number | boolean | null>;
 };
 
 export type RetrievalHit = RetrievalDoc & { score: number };
@@ -128,13 +128,21 @@ async function loadMemoryDocs(limit: number): Promise<RetrievalDoc[]> {
   const contexts: RunContext[] = await getRecentContexts(limit);
   return contexts.map((c) => {
     const summary = [c.goal, c.taskType, c.complexity, c.status, c.summary ?? ""].join(" | ");
+    const createdAtTs = Date.parse(c.createdAt ?? "");
     return {
       id: `run:${c.runId}`,
       source: "memory",
       kind: "run_summary",
       title: `run ${c.runId}`,
       text: summary,
-      metadata: { runId: c.runId, status: c.status, taskType: c.taskType, complexity: c.complexity },
+      metadata: {
+        runId: c.runId,
+        status: c.status,
+        taskType: c.taskType,
+        complexity: c.complexity,
+        createdAt: c.createdAt ?? null,
+        createdAtTs: Number.isFinite(createdAtTs) ? createdAtTs : null,
+      },
     };
   });
 }
@@ -164,10 +172,19 @@ async function loadExportDocs(limit: number): Promise<RetrievalDoc[]> {
     const docs: RetrievalDoc[] = [];
     for (const f of files) {
       const p = path.join(exportsDir, f);
+      const stat = await fs.stat(p).catch(() => null);
+      const fileTs = stat?.mtimeMs ?? null;
       const text = await fs.readFile(p, "utf8").catch(() => "");
       if (!text) continue;
 
-      docs.push({ id: `export:${f}`, source: "export", kind: "export", title: f, text: text.slice(0, 4000) });
+      docs.push({
+        id: `export:${f}`,
+        source: "export",
+        kind: "export",
+        title: f,
+        text: text.slice(0, 4000),
+        metadata: { fileTs },
+      });
 
       const sourceLines = parseSourceLines(text);
       sourceLines.forEach((line, idx) => {
@@ -177,6 +194,7 @@ async function loadExportDocs(limit: number): Promise<RetrievalDoc[]> {
           kind: "source",
           title: `${f} source ${idx + 1}`,
           text: line,
+          metadata: { fileTs },
         });
       });
 
@@ -188,6 +206,7 @@ async function loadExportDocs(limit: number): Promise<RetrievalDoc[]> {
           kind: "claim",
           title: `${f} claim ${idx + 1}`,
           text: line,
+          metadata: { fileTs },
         });
       });
     }
@@ -210,6 +229,30 @@ function lexicalScore(query: string, text: string): number {
   return s + coverage * 2;
 }
 
+function toTimestamp(hit: RetrievalHit): number {
+  const ts = Number(hit.metadata?.createdAtTs ?? hit.metadata?.fileTs ?? 0);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+/**
+ * Phase 4 reorder step: rerank by blended relevance + recency.
+ */
+export function reorderSearchHits(hits: RetrievalHit[]): RetrievalHit[] {
+  if (!hits.length) return [];
+
+  const maxTs = Math.max(...hits.map(toTimestamp), 0);
+  const minTs = Math.min(...hits.map(toTimestamp), maxTs);
+  const span = Math.max(1, maxTs - minTs);
+
+  return hits
+    .map((h) => {
+      const recencyNorm = (toTimestamp(h) - minTs) / span;
+      const score = h.score * 0.85 + recencyNorm * 0.15;
+      return { ...h, score };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
 export async function searchMemory(query: string, topK = 6): Promise<RetrievalHit[]> {
   const [memoryDocs, exportDocs] = await Promise.all([loadMemoryDocs(80), loadExportDocs(40)]);
   const allDocs = [...memoryDocs, ...exportDocs];
@@ -226,11 +269,9 @@ export async function searchMemory(query: string, topK = 6): Promise<RetrievalHi
       const combined = vecScore * 0.7 + Math.min(1, lexScore / 6) * 0.3;
       return { ...d, score: combined };
     })
-    .filter((d) => d.score > 0.05)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+    .filter((d) => d.score > 0.05);
 
-  return hits;
+  return reorderSearchHits(hits).slice(0, topK);
 }
 
 export async function retrieveContext(query: string, topK = 6): Promise<RetrievalHit[]> {
