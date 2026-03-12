@@ -523,3 +523,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: operators can fetch a current readiness snapshot from run details without a full page refresh.
 - Self-check: yes, this is a single, shippable website reliability UX improvement.
 - Next immediate step: show a small toast/timestamp confirming last manual refresh completion.
+
+## 2026-03-12 (heartbeat 10:07)
+
+- Implemented **manual refresh confirmation timestamp** in run-details health snapshot (`public/index.html`):
+  - Added `lastManualHealthRefreshAt` state tracking.
+  - `Refresh snapshot` now records completion time after successful `/healthz` fetch.
+  - Added `Last manual refresh` row in the snapshot panel to confirm refresh completion without relying on alerts.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8794 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200`.
+- Why this matters: gives operators immediate visual confirmation that an inline health refresh actually completed.
+- Self-check: yes, this is a small, shippable reliability UX improvement in the website quality loop.
+- Next immediate step: include relative age next to "Last manual refresh" (e.g., "12s ago").
