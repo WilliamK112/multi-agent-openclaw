@@ -422,3 +422,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: locks in safe edge-case behavior and prevents accidental regressions in early-return logic.
 - Self-check: yes, this is a small, focused reliability improvement aligned with ongoing Phase 4 test hardening.
 - Next immediate step: add a tiny test for `RETRIEVAL_DEBUG_SCORES=1` to ensure debug fields include `recencyNorm` and `taskBoost` after reorder.
+
+## 2026-03-12 (heartbeat 06:37)
+
+- Added **debug-score reorder guard test** in `test/retrieval.test.ts` and hardened runtime flag handling in `src/memory/retrieval.ts`:
+  - New test verifies `RETRIEVAL_DEBUG_SCORES=1` exposes reorder-stage `recencyNorm` and `taskBoost` fields.
+  - Extended assertion confirms existing debug metadata (`vectorScore` / `lexicalScore`) is preserved while reorder fields are appended.
+  - Switched debug-flag evaluation from module-load constant to runtime helper (`retrievalDebugScoresEnabled()`), so test/runtime toggles are honored predictably.
+- Verification: `npm test` passed (6 tests).
+- Why this matters: protects retrieval observability guarantees and prevents silent regressions in debug diagnostics.
+- Self-check: yes, this is a focused reliability + observability improvement aligned with ongoing Phase 4 hardening.
+- Next immediate step: add a tiny hitsToHints formatting test that includes debug breakdown only when enabled.

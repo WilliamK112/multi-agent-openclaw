@@ -62,12 +62,14 @@ test("reorderSearchHits: debug mode exposes recencyNorm/taskBoost fields", async
   const mod = await import(`../src/memory/retrieval.ts?debug=${Date.now()}`);
 
   const reorder = mod.reorderSearchHits as typeof reorderSearchHits;
-  const programming = makeHit("prog", 0.4, 2000, "programming");
+  const programming = { ...makeHit("prog", 0.4, 2000, "programming"), debug: { vectorScore: 0.7, lexicalScore: 0.3 } };
   const general = makeHit("gen", 0.4, 1000, "general");
 
   const out = reorder([general, programming], "debug this test");
   assert.ok(typeof out[0]?.debug?.recencyNorm === "number");
   assert.ok(typeof out[0]?.debug?.taskBoost === "number");
+  assert.equal(out[0]?.debug?.vectorScore, 0.7);
+  assert.equal(out[0]?.debug?.lexicalScore, 0.3);
 
   if (prev === undefined) delete process.env.RETRIEVAL_DEBUG_SCORES;
   else process.env.RETRIEVAL_DEBUG_SCORES = prev;
