@@ -142,11 +142,31 @@ app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
 app.get("/healthz", (_req, res) => {
   const provider = getProvider();
   const model = getModel(provider);
-  const degraded = provider === "fake";
+  const reasons: string[] = [];
+
+  if (provider === "fake") {
+    reasons.push("provider=fake");
+  }
+
+  const requiredKeyByProvider: Record<string, string | null> = {
+    openai: "OPENAI_API_KEY",
+    claude: "ANTHROPIC_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
+    ollama: null,
+    fake: null,
+  };
+  const requiredKey = requiredKeyByProvider[provider] ?? null;
+  if (requiredKey && !process.env[requiredKey]) {
+    reasons.push(`missing_${requiredKey}`);
+  }
+
+  const degraded = reasons.length > 0;
   return res.json({
     ok: true,
     status: degraded ? "degraded" : "ready",
     degraded,
+    reasons,
     provider,
     model,
     uptimeSec: Math.floor((Date.now() - serverStartedAt) / 1000),

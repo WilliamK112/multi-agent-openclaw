@@ -467,3 +467,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: status badge now reflects backend readiness quality (not just endpoint reachability), reducing false “connected” signals.
 - Self-check: yes, this directly advances the top-priority reliability item with a small shippable change.
 - Next immediate step: deploy this slice and wire status copy to include degraded cause text in run details panel as well.
+
+## 2026-03-12 (heartbeat 09:10)
+
+- Implemented **degraded-cause visibility** for website/system status loop:
+  - Extended `GET /healthz` payload in `src/server.ts` with explicit `reasons[]` (e.g., `provider=fake`, missing provider API key).
+  - Updated UI status handling in `public/index.html` so degraded badge text includes cause details and tooltip (`System: Degraded (<cause>)`).
+  - Kept healthy mode concise (`System: Connected`) with explicit ready tooltip.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` returned `200`.
+  - Local smoke check passed on fresh local server (`PORT=8788 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` returned `status=ready` with `reasons=[]`.
+- Why this matters: degraded state now explains *why* the system is degraded, reducing ambiguity and speeding operator triage.
+- Self-check: yes, this is a small, shippable reliability/UX improvement directly aligned with the top-priority website-online quality loop.
+- Next immediate step: surface degraded-cause detail in run details panel for per-run troubleshooting context.

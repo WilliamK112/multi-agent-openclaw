@@ -1975,18 +1975,26 @@ Hard constraints (do not echo these instructions in final output):
         const health = await healthRes.json();
         recommendBtn.disabled = false;
         if (health?.degraded) {
-          recommendStatusEl.textContent = `Recommendation available (degraded: ${health.provider || 'unknown'} provider)`;
+          const cause = Array.isArray(health?.reasons) && health.reasons.length
+            ? health.reasons.join(', ')
+            : `${health.provider || 'unknown'} provider`;
+          recommendStatusEl.textContent = `Recommendation available (degraded: ${cause})`;
         } else {
           recommendStatusEl.textContent = 'Recommendation available';
         }
         if (systemStatusEl) {
           if (health?.degraded) {
-            systemStatusEl.textContent = `System: Degraded (${health.provider || 'unknown'})`;
+            const cause = Array.isArray(health?.reasons) && health.reasons.length
+              ? health.reasons.join(', ')
+              : `${health.provider || 'unknown'}`;
+            systemStatusEl.textContent = `System: Degraded (${cause})`;
+            systemStatusEl.title = `Degraded cause: ${cause}`;
             systemStatusEl.style.borderColor = '#7a5d2b';
             systemStatusEl.style.background = '#2a2212';
             systemStatusEl.style.color = '#f3d596';
           } else {
             systemStatusEl.textContent = 'System: Connected';
+            systemStatusEl.title = 'Backend ready';
             systemStatusEl.style.borderColor = '#2f6141';
             systemStatusEl.style.background = '#13231a';
             systemStatusEl.style.color = '#9ee6b1';
