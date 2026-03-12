@@ -368,3 +368,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: diagram now reflects current implementation state instead of implying those nodes are still conceptual.
 - Self-check: yes, this directly improves roadmap trust and UI clarity with a small, safe change.
 - Next immediate step: queue refresh (all current priority items complete).
+
+## 2026-03-12 (heartbeat 04:22)
+
+- Implemented **task-type-aware reorder boost** in memory retrieval (`src/memory/retrieval.ts`):
+  - Added lightweight `inferTaskType(query)` classification (`programming | research_writing | general`) for retrieval queries.
+  - Updated `reorderSearchHits(...)` to include a small task-type alignment boost when a hit's `metadata.taskType` matches the inferred query type.
+  - Wired query-aware reorder invocation via `searchMemory(...)->reorderSearchHits(hits, query)`.
+- Verification: `npm test` passed.
+- Why this matters: better aligns retrieval ranking with intent (code vs research vs general), improving planner context quality with minimal risk.
+- Self-check: yes, this directly advances the roadmap's Phase 4 reorder criteria (relevance + recency + task-type match).
+- Next immediate step: expose reorder component scores (relevance/recency/task boost) in optional debug metadata for retrieval observability.

@@ -281,20 +281,30 @@ function toTimestamp(hit: RetrievalHit): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function inferTaskType(query: string): "programming" | "research_writing" | "general" {
+  const q = query.toLowerCase();
+  if (/\b(code|program|debug|refactor|typescript|javascript|python|bug|test)\b/.test(q)) return "programming";
+  if (/\b(research|paper|citation|sources|analysis|evidence|report|summary)\b/.test(q)) return "research_writing";
+  return "general";
+}
+
 /**
- * Phase 4 reorder step: rerank by blended relevance + recency.
+ * Phase 4 reorder step: rerank by blended relevance + recency + task-type alignment.
  */
-export function reorderSearchHits(hits: RetrievalHit[]): RetrievalHit[] {
+export function reorderSearchHits(hits: RetrievalHit[], query?: string): RetrievalHit[] {
   if (!hits.length) return [];
 
   const maxTs = Math.max(...hits.map(toTimestamp), 0);
   const minTs = Math.min(...hits.map(toTimestamp), maxTs);
   const span = Math.max(1, maxTs - minTs);
+  const queryTaskType = inferTaskType(query ?? "");
 
   return hits
     .map((h) => {
       const recencyNorm = (toTimestamp(h) - minTs) / span;
-      const score = h.score * 0.85 + recencyNorm * 0.15;
+      const hitTaskType = String(h.metadata?.taskType ?? "general");
+      const taskBoost = hitTaskType === queryTaskType ? 0.08 : 0;
+      const score = h.score * 0.77 + recencyNorm * 0.15 + taskBoost;
       return { ...h, score };
     })
     .sort((a, b) => b.score - a.score);
@@ -318,7 +328,7 @@ export async function searchMemory(query: string, topK = 6): Promise<RetrievalHi
     })
     .filter((d) => d.score > 0.05);
 
-  return reorderSearchHits(hits).slice(0, topK);
+  return reorderSearchHits(hits, query).slice(0, topK);
 }
 
 export async function retrieveContext(query: string, topK = 6): Promise<RetrievalHit[]> {
