@@ -744,8 +744,7 @@ async function continueRun(runId: string) {
     const researchAgents = asArray(run.config.roleAssignments.research);
     if (researchAgents.length >= 2 && !run.artifacts?.researchSummary) {
       const { outputs, summary } = buildResearchOutputs(run.goal, researchAgents);
-      await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
-    run.artifacts = {
+      run.artifacts = {
         ...(run.artifacts ?? {}),
         researchOutputs: outputs,
         researchSummary: summary,
@@ -917,6 +916,7 @@ async function continueRun(runId: string) {
 
     const expectedDocx = path.join(process.cwd(), `docs/exports/${run.id}.docx`);
     const expectedMd = path.join(process.cwd(), `docs/exports/${run.id}.md`);
+    const expectedDraft = path.join(process.cwd(), `docs/exports/${run.id}.draft.md`);
     const researchPath = path.join(process.cwd(), `docs/exports/${run.id}.research.md`);
     const fsp = await import("node:fs/promises");
     const researchText = await fsp.readFile(researchPath, "utf8").catch(() => "");

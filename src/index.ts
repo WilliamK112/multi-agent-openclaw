@@ -24,10 +24,3 @@ main().catch((err) => {
   process.exit(1);
 });
 
----
-## Cursor Automation Demo
-marker=CURSOR_UI_EDIT_run_1772045150508_rfhcrg
-- Edited inside Cursor UI (not shell).
-- Protected by Approval/Resume for openclaw_act.
-- Next: run real tests and save output to docs/TEST_OUTPUT.txt.
----

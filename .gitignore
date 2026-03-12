@@ -14,3 +14,4 @@ docs/runs_index.jsonl
 # Temp/local tool state
 .runner_requests/
 job_history.json
+.vercel

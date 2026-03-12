@@ -1,0 +1,28 @@
+{
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/runs",
+      "destination": "/api/runs"
+    },
+    {
+      "source": "/run",
+      "destination": "/api/run"
+    },
+    {
+      "source": "/runs/(.*)",
+      "destination": "/api/runs/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
