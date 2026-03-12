@@ -281,3 +281,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: improves retrieval quality for planning by favoring highly relevant and more recent context.
 - Self-check: yes, this directly advances Knox Phase 4 behavior with a small, shippable change.
 - Next immediate step: add `TaskSystem.run(goal, options)` abstraction in `src/orchestrator.ts`.
+
+## 2026-03-11 (heartbeat 22:22)
+
+- Implemented **Phase 4: TaskSystem** abstraction in `src/orchestrator.ts`:
+  - Added `TaskSystem.run(goal, options)` as single entry point.
+  - Flow now formalized as: classify task → select planning/execution models → plan → execute → QA → save run context.
+  - Kept backward compatibility by making existing `run(...)` delegate to `TaskSystem.run(...)`.
+- Verification: `npm test` passed.
+- Why this matters: creates a clean orchestration contract for future server/runner integration and aligns code with Knox architecture.
+- Self-check: yes, this is a direct and minimal Phase 4 completion step.
+- Next immediate step: Phase 5 programming path hardening (non-paper routing + executor model usage for code-oriented steps).
