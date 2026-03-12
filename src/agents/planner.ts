@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { generate } from "../llm/client";
 import { LLMProvider } from "../llm/types";
+import { classifyTask } from "../domain/task";
 
 export type PlanStep = {
   id: string;
@@ -38,6 +39,41 @@ function isPaperGoal(goal: string): boolean {
 }
 
 function fallbackPlan(goal: string): Plan {
+  const task = classifyTask(goal);
+
+  if (task.type === "programming") {
+    return {
+      goal,
+      steps: [
+        {
+          id: "prog-1-scope",
+          objective: "Produce a scoped implementation plan for this programming goal",
+          tools: ["llm_generate"],
+          success_criteria: "Plan file exists with concrete steps and acceptance criteria",
+          inputs: {
+            system: "You are a senior software engineer. Produce concise, practical implementation plans.",
+            prompt: `Goal: ${goal}\nReturn a concrete implementation plan with: files to touch, risks, and test checklist.`,
+            outputPath: "docs/exports/__RUN_ID__.programming.plan.md",
+          },
+        },
+        {
+          id: "prog-2-self-check",
+          objective: "Run project self-check",
+          tools: ["shell_run"],
+          success_criteria: "Project checks executed",
+          inputs: { command: "__AUTO_SELF_CHECK__" },
+        },
+        {
+          id: "prog-3-read",
+          objective: "Read generated plan artifact",
+          tools: ["file_read"],
+          success_criteria: "Programming plan is readable",
+          inputs: { path: "docs/exports/__RUN_ID__.programming.plan.md" },
+        },
+      ],
+    };
+  }
+
   if (isPaperGoal(goal)) {
     return {
       goal,

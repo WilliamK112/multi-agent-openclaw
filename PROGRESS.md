@@ -292,3 +292,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: creates a clean orchestration contract for future server/runner integration and aligns code with Knox architecture.
 - Self-check: yes, this is a direct and minimal Phase 4 completion step.
 - Next immediate step: Phase 5 programming path hardening (non-paper routing + executor model usage for code-oriented steps).
+
+## 2026-03-11 (heartbeat 22:52)
+
+- Implemented **Phase 5: Programming path** fallback hardening (`src/agents/planner.ts`):
+  - Added task-aware fallback via `classifyTask(goal)`.
+  - Programming goals now generate a dedicated plan with `llm_generate` + self-check steps.
+  - `llm_generate` uses executor-provided dynamic execution model routing, so code-oriented fallback runs on the selected model tier.
+- Verification: `npm test` passed.
+- Why this matters: restores non-paper programming path with explicit, model-routed execution behavior instead of generic non-code fallback steps.
+- Self-check: yes, this is a focused, shippable Phase 5 step that strengthens programming workflow readiness.
+- Next immediate step: Claim→evidence linking UI in run details.
