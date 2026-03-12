@@ -312,4 +312,15 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Verification: `npm test` passed.
 - Why this matters: reviewers can directly trace weak claims to linked evidence without opening raw JSON, improving inspectability and revision speed.
 - Self-check: yes, this is a clear, shippable UI trust improvement aligned to the roadmap.
-- Next immediate step: Stage contracts (typed input/output schemas) in `docs/STAGE_CONTRACTS.md`. 
+- Next immediate step: Stage contracts (typed input/output schemas) in `docs/STAGE_CONTRACTS.md`.
+
+## 2026-03-11 (heartbeat 23:52)
+
+- Implemented **Stage contracts baseline** in `docs/STAGE_CONTRACTS.md`:
+  - Added typed input/output contract definitions for `plan`, `research`, `synth`, `review`, `execute`, and `qa` stages.
+  - Added shared envelope schema, acceptance checks, and contract evolution rules.
+  - Documented integration points in current runtime for future validator wiring.
+- Verification: `npm test` passed.
+- Why this matters: formal contracts reduce stage handoff ambiguity and provide a clear path for runtime validation and safer revision loops.
+- Self-check: yes, this is a small, high-leverage architecture quality step aligned with roadmap priorities.
+- Next immediate step: Revision checkpoints (stage snapshots + diff summaries on QA fail).
