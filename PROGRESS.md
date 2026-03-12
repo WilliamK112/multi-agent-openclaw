@@ -358,3 +358,13 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: upgrades retrieval quality to semantic embeddings while keeping local reliability via deterministic fallback.
 - Self-check: yes, this is a high-impact Phase 3 quality step with safe operational behavior.
 - Next immediate step: Diagram accuracy update for implemented vs pending Knox nodes.
+
+## 2026-03-12 (heartbeat 01:52)
+
+- Implemented **diagram accuracy** update in UI architecture panel (`public/index.html`):
+  - Marked Search / Vector Embed / Reorder nodes as **Implemented** with green status styling.
+  - Added diagram legend to distinguish **Implemented** vs **Roadmap/next** nodes.
+- Verification: `npm test` passed.
+- Why this matters: diagram now reflects current implementation state instead of implying those nodes are still conceptual.
+- Self-check: yes, this directly improves roadmap trust and UI clarity with a small, safe change.
+- Next immediate step: queue refresh (all current priority items complete).
