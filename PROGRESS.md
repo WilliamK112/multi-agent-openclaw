@@ -468,6 +468,20 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Self-check: yes, this directly advances the top-priority reliability item with a small shippable change.
 - Next immediate step: deploy this slice and wire status copy to include degraded cause text in run details panel as well.
 
+## 2026-03-12 (heartbeat 09:16)
+
+- Surfaced **system degraded-cause snapshot** directly in run details UI (`public/index.html`):
+  - Cached latest `/healthz` response (`status`, `degraded`, `provider`, `model`, `reasons`) from system status checks.
+  - Added collapsible **System snapshot (healthy/degraded)** panel in run details with explicit degraded-cause text.
+  - Keeps troubleshooting context close to run artifacts so operators can diagnose failures without leaving details view.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8790 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200` with readiness JSON.
+- Why this matters: makes backend health/degradation context visible at the exact point where run debugging happens, reducing triage hops.
+- Self-check: yes, this is a small, shippable reliability/UX improvement aligned with the website online quality loop.
+- Next immediate step: add a stale-age indicator to the run-details health snapshot so operators know how fresh the displayed status is.
+
 ## 2026-03-12 (heartbeat 09:10)
 
 - Implemented **degraded-cause visibility** for website/system status loop:

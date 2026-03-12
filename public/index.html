@@ -707,6 +707,7 @@
     ];
     let roleAssignmentsByRole = Object.fromEntries(workflowRoles.map(r => [r.id, 'none']));
     let recommendedBundle = null;
+    let latestHealthSnapshot = null;
 
     const chatTabsEl = document.getElementById('chat-tabs');
     const goalInput = document.getElementById('goal');
@@ -1596,6 +1597,14 @@ Hard constraints (do not echo these instructions in final output):
       if (/LLM provider=fake/i.test(logsText)) {
         content += `<div style="background:#5b1f1f;color:#fee2e2;border:1px solid #7f1d1d;padding:10px;border-radius:8px;margin:8px 0;"><strong>Quality warning:</strong> this run used <code>fake</code> provider. Output is likely low-fidelity demo content. Configure a real provider (OpenAI/Anthropic/DeepSeek/Ollama) for production-quality essays.</div>`;
       }
+      if (latestHealthSnapshot) {
+        const reasons = Array.isArray(latestHealthSnapshot.reasons) ? latestHealthSnapshot.reasons : [];
+        const reasonText = reasons.length ? reasons.join(', ') : 'none';
+        const healthTone = latestHealthSnapshot.degraded
+          ? { bg: '#2a2212', border: '#7a5d2b', fg: '#f3d596', title: 'System snapshot (degraded)' }
+          : { bg: '#13231a', border: '#2f6141', fg: '#9ee6b1', title: 'System snapshot (healthy)' };
+        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
+      }
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
       if (Array.isArray(run.config?.workflowStages)) {
         const list = run.config.workflowStages.map((s, i) => `${i+1}. ${s.id} (${s.type}) agents=${(s.agents||[]).join(',')} merge=${s.mergePolicy}`).join('\n');
@@ -1973,6 +1982,14 @@ Hard constraints (do not echo these instructions in final output):
         const healthRes = await fetch(`${API}/healthz`);
         if (!healthRes.ok) throw new Error(String(healthRes.status));
         const health = await healthRes.json();
+        latestHealthSnapshot = {
+          at: Date.now(),
+          status: String(health?.status || 'unknown'),
+          degraded: !!health?.degraded,
+          provider: String(health?.provider || 'unknown'),
+          model: String(health?.model || 'unknown'),
+          reasons: Array.isArray(health?.reasons) ? health.reasons.map((r) => String(r)) : [],
+        };
         recommendBtn.disabled = false;
         if (health?.degraded) {
           const cause = Array.isArray(health?.reasons) && health.reasons.length
@@ -2004,6 +2021,7 @@ Hard constraints (do not echo these instructions in final output):
         try {
           const res = await fetch(`${API}/runs?limit=1`);
           if (!res.ok) throw new Error(String(res.status));
+          latestHealthSnapshot = null;
           recommendBtn.disabled = false;
           recommendStatusEl.textContent = 'Recommendation available (health unknown)';
           if (systemStatusEl) {
@@ -2014,6 +2032,7 @@ Hard constraints (do not echo these instructions in final output):
           }
           return;
         } catch {}
+        latestHealthSnapshot = null;
         recommendBtn.disabled = true;
         recommendStatusEl.textContent = 'Recommendation offline';
         if (systemStatusEl) {
