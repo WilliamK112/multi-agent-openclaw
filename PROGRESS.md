@@ -346,3 +346,15 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: improves planner grounding quality and closes the memory-to-planning loop with a concise, high-signal summary.
 - Self-check: yes, this is a focused, high-value improvement to cross-run context utilization.
 - Next immediate step: OpenAI embeddings migration (`text-embedding-3-small`) when API key is available.
+
+## 2026-03-12 (heartbeat 01:22)
+
+- Implemented **OpenAI embeddings** integration in memory retrieval (`src/memory/retrieval.ts`):
+  - Added batched OpenAI embeddings (`/v1/embeddings`) using `OPENAI_EMBEDDING_MODEL` (default `text-embedding-3-small`).
+  - Added chunked embedding writes (`OPENAI_EMBED_BATCH_SIZE`) to avoid one-by-one API calls.
+  - Updated vector upsert to embed changed docs in batches and preserve local hash-based fallback when API key is missing/fails.
+  - Query embedding now uses the same OpenAI path (with fallback) for retrieval consistency.
+- Verification: `npm test` passed.
+- Why this matters: upgrades retrieval quality to semantic embeddings while keeping local reliability via deterministic fallback.
+- Self-check: yes, this is a high-impact Phase 3 quality step with safe operational behavior.
+- Next immediate step: Diagram accuracy update for implemented vs pending Knox nodes.

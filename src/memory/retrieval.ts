@@ -26,6 +26,8 @@ type VectorRecord = {
 
 const VECTOR_DIM = Number(process.env.MEMORY_VECTOR_DIM ?? 256);
 const VECTOR_DB = path.resolve(process.cwd(), process.env.MEMORY_VECTOR_FILE ?? "docs/memory/vectors.jsonl");
+const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
+const OPENAI_EMBED_BATCH_SIZE = Math.max(1, Math.min(128, Number(process.env.OPENAI_EMBED_BATCH_SIZE ?? 64)));
 
 function tokenize(input: string): string[] {
   return input
@@ -40,7 +42,7 @@ function hashText(text: string): string {
   return createHash("sha1").update(text).digest("hex");
 }
 
-function embedText(input: string): number[] {
+function embedTextHash(input: string): number[] {
   const vec = new Array<number>(VECTOR_DIM).fill(0);
   const tokens = tokenize(input);
   if (!tokens.length) return vec;
@@ -62,6 +64,42 @@ function cosine(a: number[], b: number[]): number {
   let s = 0;
   for (let i = 0; i < n; i++) s += a[i] * b[i];
   return s;
+}
+
+async function embedTextsOpenAI(texts: string[]): Promise<number[][] | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !texts.length) return null;
+
+  const vectors: number[][] = [];
+  for (let i = 0; i < texts.length; i += OPENAI_EMBED_BATCH_SIZE) {
+    const batch = texts.slice(i, i + OPENAI_EMBED_BATCH_SIZE);
+    const res = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: batch }),
+    }).catch(() => null);
+
+    if (!res || !res.ok) return null;
+    const data: any = await res.json().catch(() => null);
+    const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+    if (!rows.length) return null;
+    for (const row of rows) {
+      const emb = Array.isArray(row?.embedding) ? row.embedding.map(Number) : null;
+      if (!emb || !emb.length) return null;
+      vectors.push(emb);
+    }
+  }
+
+  return vectors.length === texts.length ? vectors : null;
+}
+
+async function embedTexts(texts: string[]): Promise<number[][]> {
+  const openai = await embedTextsOpenAI(texts).catch(() => null);
+  if (openai && openai.length === texts.length) return openai;
+  return texts.map((t) => embedTextHash(t));
 }
 
 async function loadVectorStore(): Promise<Map<string, VectorRecord>> {
@@ -94,21 +132,30 @@ async function upsertVectors(docs: RetrievalDoc[]): Promise<VectorRecord[]> {
   const existing = await loadVectorStore();
   let dirty = false;
 
+  const toEmbed: RetrievalDoc[] = [];
   for (const d of docs) {
     const h = hashText(d.text);
     const prev = existing.get(d.id);
     if (prev && prev.hash === h) continue;
+    toEmbed.push(d);
+  }
 
-    existing.set(d.id, {
-      id: d.id,
-      hash: h,
-      source: d.source,
-      kind: d.kind,
-      title: d.title,
-      text: d.text,
-      vector: embedText(d.text),
-    });
-    dirty = true;
+  if (toEmbed.length) {
+    const embedded = await embedTexts(toEmbed.map((d) => d.text));
+    for (let i = 0; i < toEmbed.length; i++) {
+      const d = toEmbed[i];
+      const h = hashText(d.text);
+      existing.set(d.id, {
+        id: d.id,
+        hash: h,
+        source: d.source,
+        kind: d.kind,
+        title: d.title,
+        text: d.text,
+        vector: embedded[i] ?? embedTextHash(d.text),
+      });
+      dirty = true;
+    }
   }
 
   const validIds = new Set(docs.map((d) => d.id));
@@ -259,7 +306,7 @@ export async function searchMemory(query: string, topK = 6): Promise<RetrievalHi
 
   const vectorRows = await upsertVectors(allDocs);
   const rowById = new Map(vectorRows.map((r) => [r.id, r]));
-  const qv = embedText(query);
+  const qv = (await embedTexts([query]))[0] ?? embedTextHash(query);
 
   const hits = allDocs
     .map((d) => {
