@@ -495,3 +495,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: degraded state now explains *why* the system is degraded, reducing ambiguity and speeding operator triage.
 - Self-check: yes, this is a small, shippable reliability/UX improvement directly aligned with the top-priority website-online quality loop.
 - Next immediate step: surface degraded-cause detail in run details panel for per-run troubleshooting context.
+
+## 2026-03-12 (heartbeat 09:46)
+
+- Implemented **health snapshot freshness indicator** in run details (`public/index.html`):
+  - Added `formatAgeMs(...)` helper for compact age formatting.
+  - Added `Snapshot age` row in system snapshot panel (`Xs / Xm Ys / Xh Ym`) with checked-at local time.
+  - Added stale-age visual cue (yellow) when snapshot is older than 2 minutes.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8792 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200`.
+- Why this matters: operators can now judge whether health data in run details is current versus stale during debugging.
+- Self-check: yes, this is a small, shippable reliability/UX improvement in the website quality loop.
+- Next immediate step: add auto-refresh action for system snapshot panel to fetch fresh `/healthz` without full page reload.

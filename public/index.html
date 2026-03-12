@@ -1573,6 +1573,16 @@ Hard constraints (do not echo these instructions in final output):
       return div.innerHTML;
     }
 
+    function formatAgeMs(ms) {
+      const clamped = Number.isFinite(ms) ? Math.max(0, ms) : 0;
+      const sec = Math.floor(clamped / 1000);
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}m ${sec % 60}s`;
+      const hr = Math.floor(min / 60);
+      return `${hr}h ${min % 60}m`;
+    }
+
     function renderDetail(run) {
       detailPanel.style.display = 'block';
       let actionsHtml = '';
@@ -1600,10 +1610,14 @@ Hard constraints (do not echo these instructions in final output):
       if (latestHealthSnapshot) {
         const reasons = Array.isArray(latestHealthSnapshot.reasons) ? latestHealthSnapshot.reasons : [];
         const reasonText = reasons.length ? reasons.join(', ') : 'none';
+        const ageMs = Date.now() - Number(latestHealthSnapshot.at || 0);
+        const snapshotAge = formatAgeMs(ageMs);
+        const checkedAt = new Date(Number(latestHealthSnapshot.at || Date.now())).toLocaleTimeString();
+        const staleTone = ageMs > 2 * 60 * 1000 ? '#facc15' : '#9ee6b1';
         const healthTone = latestHealthSnapshot.degraded
           ? { bg: '#2a2212', border: '#7a5d2b', fg: '#f3d596', title: 'System snapshot (degraded)' }
           : { bg: '#13231a', border: '#2f6141', fg: '#9ee6b1', title: 'System snapshot (healthy)' };
-        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
+        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Snapshot age:</strong> <span style="color:${staleTone};font-weight:700;">${escapeHtml(snapshotAge)} ago</span> <span style="opacity:.82;">(checked ${escapeHtml(checkedAt)})</span></div><div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
       }
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
       if (Array.isArray(run.config?.workflowStages)) {

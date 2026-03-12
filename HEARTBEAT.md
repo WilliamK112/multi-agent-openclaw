@@ -49,7 +49,7 @@
 
 ## Last completed (update after each work beat)
 
-_None yet._
+- 2026-03-12 09:46 CDT — Website quality quick win: run-details system snapshot now shows freshness (`Snapshot age` + checked-at time) with stale highlighting after 2 minutes.
 
 ---
 
