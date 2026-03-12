@@ -303,3 +303,13 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: restores non-paper programming path with explicit, model-routed execution behavior instead of generic non-code fallback steps.
 - Self-check: yes, this is a focused, shippable Phase 5 step that strengthens programming workflow readiness.
 - Next immediate step: Claim→evidence linking UI in run details.
+
+## 2026-03-11 (heartbeat 23:22)
+
+- Implemented **Claim→evidence linking UI** across server + run details UI:
+  - Server now enriches unsupported claim samples with `linked_sources` (source id/title/url) from evidence links (`src/server.ts`).
+  - Run details table adds a **Linked evidence** column with source chips (clickable URLs when available) (`public/index.html`).
+- Verification: `npm test` passed.
+- Why this matters: reviewers can directly trace weak claims to linked evidence without opening raw JSON, improving inspectability and revision speed.
+- Self-check: yes, this is a clear, shippable UI trust improvement aligned to the roadmap.
+- Next immediate step: Stage contracts (typed input/output schemas) in `docs/STAGE_CONTRACTS.md`. 

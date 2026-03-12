@@ -1085,12 +1085,17 @@ async function continueRun(runId: string) {
       unsupported_claims_count: unsupportedClaims.length,
       unsupported_claims_sample: unsupportedClaims.slice(0, 8).map((c) => {
         const linksForClaim = evidenceBundle.links.filter((l) => l.claimId === c.id);
+        const linkedSources = linksForClaim
+          .map((l) => evidenceBundle.sources.find((s) => s.id === l.sourceId))
+          .filter(Boolean)
+          .map((s: any) => ({ id: s.id, title: s.title, url: s.url }));
         return {
           id: c.id,
           text: c.text,
           section: c.section,
           link_count: linksForClaim.length,
           missing_link_count: Math.max(1 - linksForClaim.length, 0),
+          linked_sources: linkedSources,
         };
       }),
       exportStatus: docxExists ? (gatePassed ? "exported" : "exported_with_gate_fail") : "draft_only_not_exported",
