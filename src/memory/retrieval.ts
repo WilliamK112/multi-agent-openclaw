@@ -371,5 +371,20 @@ export async function retrieveContext(query: string, topK = 6): Promise<Retrieva
 }
 
 export function hitsToHints(hits: RetrievalHit[]): string[] {
-  return hits.map((h) => `${h.source}/${h.kind}:${h.title} (score=${h.score.toFixed(3)}) ${h.text.slice(0, 180).replace(/\s+/g, " ")}`);
+  return hits.map((h) => {
+    const base = `${h.source}/${h.kind}:${h.title} (score=${h.score.toFixed(3)}) ${h.text.slice(0, 180).replace(/\s+/g, " ")}`;
+    if (!retrievalDebugScoresEnabled() || !h.debug) return base;
+
+    const dbg = [
+      h.debug.vectorScore !== undefined ? `v=${h.debug.vectorScore.toFixed(3)}` : null,
+      h.debug.lexicalScore !== undefined ? `lex=${h.debug.lexicalScore.toFixed(3)}` : null,
+      h.debug.baseScore !== undefined ? `base=${h.debug.baseScore.toFixed(3)}` : null,
+      h.debug.recencyNorm !== undefined ? `rec=${h.debug.recencyNorm.toFixed(3)}` : null,
+      h.debug.taskBoost !== undefined ? `task=${h.debug.taskBoost.toFixed(3)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return dbg ? `${base} [debug ${dbg}]` : base;
+  });
 }

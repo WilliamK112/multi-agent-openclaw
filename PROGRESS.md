@@ -433,3 +433,23 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: protects retrieval observability guarantees and prevents silent regressions in debug diagnostics.
 - Self-check: yes, this is a focused reliability + observability improvement aligned with ongoing Phase 4 hardening.
 - Next immediate step: add a tiny hitsToHints formatting test that includes debug breakdown only when enabled.
+
+## 2026-03-12 (heartbeat 08:07)
+
+- Added **hitsToHints debug-format guard** in retrieval hints path:
+  - Updated `hitsToHints(...)` in `src/memory/retrieval.ts` to append compact debug breakdown (`v/lex/base/rec/task`) only when `RETRIEVAL_DEBUG_SCORES=1` and debug data exists.
+  - Added test `hitsToHints: includes debug breakdown only when RETRIEVAL_DEBUG_SCORES=1` in `test/retrieval.test.ts`.
+- Verification: `npm test` passed (7 tests).
+- Why this matters: keeps default planner hints clean while preserving optional deep observability in debug mode.
+- Self-check: yes, this is a small, shippable quality improvement aligned with Phase 4 observability hardening.
+- Next immediate step: website online quality loop item — add a lightweight health endpoint and wire UI system-status check to it for clearer connected/degraded detection.
+
+## 2026-03-12 (heartbeat 08:01)
+
+- Implemented **debug-aware hint formatting + guard test** for retrieval hints:
+  - Updated `hitsToHints(...)` in `src/memory/retrieval.ts` to append a compact debug suffix (`[debug v=... lex=... base=... rec=... task=...]`) only when `RETRIEVAL_DEBUG_SCORES=1` and debug fields exist.
+  - Added `hitsToHints` coverage in `test/retrieval.test.ts` to verify debug breakdown is omitted by default and included when the debug env flag is enabled.
+- Verification: `npm test` passed (7 tests).
+- Why this matters: improves planner-hint observability in debug mode without polluting normal hint output.
+- Self-check: yes, this is a small, high-signal reliability/diagnostics improvement aligned with ongoing Phase 4 hardening.
+- Next immediate step: start website-online quality loop item by adding a lightweight `/healthz` endpoint + UI status check fallback path.

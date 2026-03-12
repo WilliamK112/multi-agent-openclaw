@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reorderSearchHits, type RetrievalHit } from "../src/memory/retrieval";
+import { hitsToHints, reorderSearchHits, type RetrievalHit } from "../src/memory/retrieval";
 
 function makeHit(id: string, score: number, ts: number, taskType?: string): RetrievalHit {
   return {
@@ -70,6 +70,30 @@ test("reorderSearchHits: debug mode exposes recencyNorm/taskBoost fields", async
   assert.ok(typeof out[0]?.debug?.taskBoost === "number");
   assert.equal(out[0]?.debug?.vectorScore, 0.7);
   assert.equal(out[0]?.debug?.lexicalScore, 0.3);
+
+  if (prev === undefined) delete process.env.RETRIEVAL_DEBUG_SCORES;
+  else process.env.RETRIEVAL_DEBUG_SCORES = prev;
+});
+
+test("hitsToHints: includes debug breakdown only when RETRIEVAL_DEBUG_SCORES=1", async () => {
+  const prev = process.env.RETRIEVAL_DEBUG_SCORES;
+  const hit: RetrievalHit = {
+    ...makeHit("dbg", 0.42, 2000, "programming"),
+    debug: { vectorScore: 0.7, lexicalScore: 0.3, baseScore: 0.58, recencyNorm: 1, taskBoost: 0.08 },
+  };
+
+  delete process.env.RETRIEVAL_DEBUG_SCORES;
+  const offHints = hitsToHints([hit]);
+  assert.equal(offHints.length, 1);
+  assert.equal(offHints[0]?.includes("[debug"), false);
+
+  process.env.RETRIEVAL_DEBUG_SCORES = "1";
+  const mod = await import(`../src/memory/retrieval.ts?hints=${Date.now()}`);
+  const onHints = (mod.hitsToHints as typeof hitsToHints)([hit]);
+  assert.equal(onHints.length, 1);
+  assert.equal(onHints[0]?.includes("[debug"), true);
+  assert.equal(onHints[0]?.includes("v=0.700"), true);
+  assert.equal(onHints[0]?.includes("task=0.080"), true);
 
   if (prev === undefined) delete process.env.RETRIEVAL_DEBUG_SCORES;
   else process.env.RETRIEVAL_DEBUG_SCORES = prev;
