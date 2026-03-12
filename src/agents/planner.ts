@@ -410,7 +410,7 @@ export async function planner(goal: string, provider: LLMProvider, model: string
     `Goal: ${goal}`,
     contextHints.length ? `Recent context hints:\n- ${contextHints.join("\n- ")}` : "Recent context hints: (none)",
     `Return strict JSON only with shape: { goal, steps:[{id, objective, tools, success_criteria, inputs?}] }`,
-    `Allowed tools: shell_run, file_read, file_write, openclaw_act, cursor_act`,
+    `Allowed tools: shell_run, file_read, file_write, openclaw_act, cursor_act, llm_generate`,
     `Need 3-6 steps.`,
     `Prefer including an early context/research step for quality when task is complex.`,
     `Avoid writing over README.md; write generated output to README.generated.md if needed.`,

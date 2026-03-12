@@ -11,7 +11,7 @@ import { validateWorkflowEvidenceBundle, findUnsupportedClaims } from "./domain/
 import { classifyTask } from "./domain/task";
 import { selectPlanningModel } from "./llm/selector";
 import { saveRunContext, getRecentContexts } from "./memory/context";
-import { retrieveContext, hitsToHints } from "./memory/retrieval";
+import { retrieveContext, hitsToHints, searchMemory } from "./memory/retrieval";
 import { selectExecutionModel } from "./llm/selector";
 
 type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
@@ -788,7 +788,11 @@ async function continueRun(runId: string) {
           anti_overfitting_applied: Boolean(run.config?.anti_overfitting_applied),
         } as any;
       }
-      const result = await executor(step, process.cwd(), run.id);
+      const result = await executor(step, process.cwd(), run.id, {
+        executionModel: run.config?.executionModel,
+        taskType: run.config?.taskClassification?.type as any,
+        complexity: run.config?.taskClassification?.complexity as any,
+      });
 
       const shellLogs = result.logs.filter((l) => l.skill === "shell_run") as any[];
       for (const shellLog of shellLogs) {
@@ -1138,7 +1142,7 @@ app.get("/memory/search", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   if (!q) return res.status(400).json({ error: "Missing query parameter q" });
   const limit = Math.max(1, Math.min(20, Number(req.query.limit ?? 6)));
-  const hits = await retrieveContext(q, limit);
+  const hits = await searchMemory(q, limit);
   return res.json(hits);
 });
 

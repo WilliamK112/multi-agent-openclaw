@@ -181,7 +181,13 @@ function buildJudgeResult(md: string, goal: string, passThreshold = 24, previous
   };
 }
 
-export async function executor(step: PlanStep, projectRoot: string, runId = ""): Promise<StepExecution> {
+export type ExecutorOptions = {
+  executionModel?: ModelSpec;
+  taskType?: TaskType;
+  complexity?: Complexity;
+};
+
+export async function executor(step: PlanStep, projectRoot: string, runId = "", options: ExecutorOptions = {}): Promise<StepExecution> {
   const logs: StepExecution["logs"] = [];
 
   function logSkill(skill: string, input: unknown, output: unknown) {
@@ -768,6 +774,45 @@ export async function executor(step: PlanStep, projectRoot: string, runId = ""):
       for (const command of commands) {
         const out = await shellRun(command, projectRoot);
         logSkill("shell_run", { command }, out);
+      }
+      continue;
+    }
+
+    if (tool === "llm_generate") {
+      const selected =
+        options.executionModel ??
+        selectExecutionModel(options.taskType ?? "general", options.complexity ?? "medium");
+      const systemPrompt = String(step.inputs?.system ?? "You are a precise execution assistant.");
+      const userPrompt = String(step.inputs?.prompt ?? step.objective ?? "");
+      const outPath = step.inputs?.outputPath ? String(step.inputs.outputPath) : "";
+
+      try {
+        const llmOut = await generate({
+          provider: selected.provider,
+          model: selected.model,
+          temperature: Number(step.inputs?.temperature ?? 0.2),
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+        });
+
+        let persisted: any = { ok: true };
+        if (outPath) {
+          persisted = await fileWrite(projectRoot, outPath, llmOut.text);
+        }
+
+        logSkill(
+          "llm_generate",
+          { provider: selected.provider, model: selected.model, outputPath: outPath || null },
+          { ok: true, provider: llmOut.provider, model: llmOut.model, chars: llmOut.text.length, persisted }
+        );
+      } catch (err) {
+        logSkill(
+          "llm_generate",
+          { provider: selected.provider, model: selected.model, outputPath: outPath || null },
+          { ok: false, error: err instanceof Error ? err.message : String(err) }
+        );
       }
       continue;
     }
