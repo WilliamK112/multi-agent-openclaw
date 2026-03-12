@@ -12,7 +12,16 @@ export type RetrievalDoc = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
-export type RetrievalHit = RetrievalDoc & { score: number };
+export type RetrievalHit = RetrievalDoc & {
+  score: number;
+  debug?: {
+    vectorScore?: number;
+    lexicalScore?: number;
+    baseScore?: number;
+    recencyNorm?: number;
+    taskBoost?: number;
+  };
+};
 
 type VectorRecord = {
   id: string;
@@ -28,6 +37,7 @@ const VECTOR_DIM = Number(process.env.MEMORY_VECTOR_DIM ?? 256);
 const VECTOR_DB = path.resolve(process.cwd(), process.env.MEMORY_VECTOR_FILE ?? "docs/memory/vectors.jsonl");
 const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 const OPENAI_EMBED_BATCH_SIZE = Math.max(1, Math.min(128, Number(process.env.OPENAI_EMBED_BATCH_SIZE ?? 64)));
+const RETRIEVAL_DEBUG_SCORES = process.env.RETRIEVAL_DEBUG_SCORES === "1";
 
 function tokenize(input: string): string[] {
   return input
@@ -304,8 +314,20 @@ export function reorderSearchHits(hits: RetrievalHit[], query?: string): Retriev
       const recencyNorm = (toTimestamp(h) - minTs) / span;
       const hitTaskType = String(h.metadata?.taskType ?? "general");
       const taskBoost = hitTaskType === queryTaskType ? 0.08 : 0;
-      const score = h.score * 0.77 + recencyNorm * 0.15 + taskBoost;
-      return { ...h, score };
+      const baseScore = h.score;
+      const score = baseScore * 0.77 + recencyNorm * 0.15 + taskBoost;
+      return {
+        ...h,
+        score,
+        debug: RETRIEVAL_DEBUG_SCORES
+          ? {
+              ...(h.debug ?? {}),
+              baseScore,
+              recencyNorm,
+              taskBoost,
+            }
+          : h.debug,
+      };
     })
     .sort((a, b) => b.score - a.score);
 }
@@ -323,8 +345,19 @@ export async function searchMemory(query: string, topK = 6): Promise<RetrievalHi
       const row = rowById.get(d.id);
       const vecScore = row ? Math.max(0, cosine(qv, row.vector)) : 0;
       const lexScore = lexicalScore(query, d.text);
-      const combined = vecScore * 0.7 + Math.min(1, lexScore / 6) * 0.3;
-      return { ...d, score: combined };
+      const lexicalNorm = Math.min(1, lexScore / 6);
+      const combined = vecScore * 0.7 + lexicalNorm * 0.3;
+      return {
+        ...d,
+        score: combined,
+        debug: RETRIEVAL_DEBUG_SCORES
+          ? {
+              vectorScore: vecScore,
+              lexicalScore: lexicalNorm,
+              baseScore: combined,
+            }
+          : undefined,
+      };
     })
     .filter((d) => d.score > 0.05);
 

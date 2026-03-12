@@ -379,3 +379,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: better aligns retrieval ranking with intent (code vs research vs general), improving planner context quality with minimal risk.
 - Self-check: yes, this directly advances the roadmap's Phase 4 reorder criteria (relevance + recency + task-type match).
 - Next immediate step: expose reorder component scores (relevance/recency/task boost) in optional debug metadata for retrieval observability.
+
+## 2026-03-12 (heartbeat 04:52)
+
+- Implemented **retrieval score observability** in memory retrieval (`src/memory/retrieval.ts`):
+  - Added optional debug scoring metadata behind `RETRIEVAL_DEBUG_SCORES=1`.
+  - Search-stage hits now capture `vectorScore`, normalized `lexicalScore`, and blended `baseScore`.
+  - Reorder-stage now appends `recencyNorm` and `taskBoost` to debug metadata while computing final score.
+- Verification: `npm test` passed.
+- Why this matters: makes reranking decisions inspectable without affecting default output payloads in normal mode.
+- Self-check: yes, this is a small, direct quality/observability improvement for Phase 4 retrieval behavior.
+- Next immediate step: add a compact unit test for `reorderSearchHits(...)` to lock in recency+task-boost ordering behavior.
