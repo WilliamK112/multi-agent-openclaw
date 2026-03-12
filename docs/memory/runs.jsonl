@@ -1,0 +1,2 @@
+{"runId":"run_1773315330474_90oyf0","goal":"quick local smoke test","taskType":"programming","complexity":"medium","status":"error","createdAt":"2026-03-12T11:35:30.474Z","completedAt":"2026-03-12T11:35:31.580Z"}
+{"runId":"run_1773315422308_nvdcfq","goal":"quick local smoke test after fix","taskType":"programming","complexity":"simple","status":"done","createdAt":"2026-03-12T11:37:02.309Z","completedAt":"2026-03-12T11:37:03.282Z","summary":"QA pass=false","artifactPaths":["/Users/William/.openclaw/workspace/multi-agent-openclaw/docs/exports/run_1773315422308_nvdcfq.md"]}

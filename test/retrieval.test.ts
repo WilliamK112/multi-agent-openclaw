@@ -55,3 +55,20 @@ test("reorderSearchHits: returns empty array for empty input without mutating", 
   assert.deepEqual(input, snapshot);
   assert.notEqual(out, input);
 });
+
+test("reorderSearchHits: debug mode exposes recencyNorm/taskBoost fields", async () => {
+  const prev = process.env.RETRIEVAL_DEBUG_SCORES;
+  process.env.RETRIEVAL_DEBUG_SCORES = "1";
+  const mod = await import(`../src/memory/retrieval.ts?debug=${Date.now()}`);
+
+  const reorder = mod.reorderSearchHits as typeof reorderSearchHits;
+  const programming = makeHit("prog", 0.4, 2000, "programming");
+  const general = makeHit("gen", 0.4, 1000, "general");
+
+  const out = reorder([general, programming], "debug this test");
+  assert.ok(typeof out[0]?.debug?.recencyNorm === "number");
+  assert.ok(typeof out[0]?.debug?.taskBoost === "number");
+
+  if (prev === undefined) delete process.env.RETRIEVAL_DEBUG_SCORES;
+  else process.env.RETRIEVAL_DEBUG_SCORES = prev;
+});

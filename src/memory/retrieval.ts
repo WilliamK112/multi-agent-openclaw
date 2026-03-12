@@ -37,7 +37,9 @@ const VECTOR_DIM = Number(process.env.MEMORY_VECTOR_DIM ?? 256);
 const VECTOR_DB = path.resolve(process.cwd(), process.env.MEMORY_VECTOR_FILE ?? "docs/memory/vectors.jsonl");
 const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 const OPENAI_EMBED_BATCH_SIZE = Math.max(1, Math.min(128, Number(process.env.OPENAI_EMBED_BATCH_SIZE ?? 64)));
-const RETRIEVAL_DEBUG_SCORES = process.env.RETRIEVAL_DEBUG_SCORES === "1";
+function retrievalDebugScoresEnabled(): boolean {
+  return process.env.RETRIEVAL_DEBUG_SCORES === "1";
+}
 
 function tokenize(input: string): string[] {
   return input
@@ -319,7 +321,7 @@ export function reorderSearchHits(hits: RetrievalHit[], query?: string): Retriev
       return {
         ...h,
         score,
-        debug: RETRIEVAL_DEBUG_SCORES
+        debug: retrievalDebugScoresEnabled()
           ? {
               ...(h.debug ?? {}),
               baseScore,
@@ -350,7 +352,7 @@ export async function searchMemory(query: string, topK = 6): Promise<RetrievalHi
       return {
         ...d,
         score: combined,
-        debug: RETRIEVAL_DEBUG_SCORES
+        debug: retrievalDebugScoresEnabled()
           ? {
               vectorScore: vecScore,
               lexicalScore: lexicalNorm,
