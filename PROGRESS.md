@@ -550,3 +550,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: gives faster operator feedback on recency of manual status checks without mental timestamp math.
 - Self-check: yes, this is one focused, shippable UI reliability improvement.
 - Next immediate step: add subtle auto-update tick so ages refresh while details remain open.
+
+## 2026-03-12 (heartbeat 10:14)
+
+- Implemented **live relative-age ticker** in run-details system snapshot (`public/index.html`):
+  - Added `restartDetailAgeTicker()` + `syncRelativeAgeLabels()` helpers.
+  - Snapshot age and manual refresh age now update every second while details panel stays open.
+  - Uses `data-age-from-ts` attributes to keep UI age labels fresh without requiring full rerender.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8796 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200`.
+- Why this matters: operators now see continuously fresh timing context while inspecting run health details.
+- Self-check: yes, this is one focused, shippable website reliability improvement.
+- Next immediate step: add a subtle stale badge style change when snapshot age crosses threshold during ticker updates.

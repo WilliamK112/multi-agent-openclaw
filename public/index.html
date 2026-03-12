@@ -621,6 +621,7 @@
     const API = window.location.origin;
     let selectedRunId = null;
     let pollInterval = null;
+    let detailAgeTickInterval = null;
     let allRunsCache = [];
     let trendWindow = 50;
     let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
@@ -1584,6 +1585,25 @@ Hard constraints (do not echo these instructions in final output):
       return `${hr}h ${min % 60}m`;
     }
 
+    function syncRelativeAgeLabels() {
+      const ageEls = detailContent.querySelectorAll('[data-age-from-ts]');
+      ageEls.forEach((el) => {
+        const ts = Number(el.getAttribute('data-age-from-ts') || 0);
+        if (!Number.isFinite(ts) || ts <= 0) return;
+        el.textContent = `${formatAgeMs(Date.now() - ts)} ago`;
+      });
+    }
+
+    function restartDetailAgeTicker() {
+      if (detailAgeTickInterval) {
+        clearInterval(detailAgeTickInterval);
+        detailAgeTickInterval = null;
+      }
+      syncRelativeAgeLabels();
+      if (!detailContent.querySelector('[data-age-from-ts]')) return;
+      detailAgeTickInterval = setInterval(syncRelativeAgeLabels, 1000);
+    }
+
     function renderDetail(run) {
       detailPanel.style.display = 'block';
       let actionsHtml = '';
@@ -1620,7 +1640,7 @@ Hard constraints (do not echo these instructions in final output):
         const healthTone = latestHealthSnapshot.degraded
           ? { bg: '#2a2212', border: '#7a5d2b', fg: '#f3d596', title: 'System snapshot (degraded)' }
           : { bg: '#13231a', border: '#2f6141', fg: '#9ee6b1', title: 'System snapshot (healthy)' };
-        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><button class="clear-btn" data-refresh-health style="font-size:.72rem;padding:3px 8px;">Refresh snapshot</button></div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Snapshot age:</strong> <span style="color:${staleTone};font-weight:700;">${escapeHtml(snapshotAge)} ago</span> <span style="opacity:.82;">(checked ${escapeHtml(checkedAt)})</span></div>${manualRefreshedAt ? `<div><strong>Last manual refresh:</strong> <span style="color:#93c5fd;">${escapeHtml(manualRefreshedAt)}</span> <span style="opacity:.82;">(${escapeHtml(String(manualRefreshedAge || '0s'))} ago)</span></div>` : ''}<div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
+        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><button class="clear-btn" data-refresh-health style="font-size:.72rem;padding:3px 8px;">Refresh snapshot</button></div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Snapshot age:</strong> <span style="color:${staleTone};font-weight:700;" data-age-from-ts="${escapeHtml(String(Number(latestHealthSnapshot.at || Date.now())))}">${escapeHtml(snapshotAge)} ago</span> <span style="opacity:.82;">(checked ${escapeHtml(checkedAt)})</span></div>${manualRefreshedAt ? `<div><strong>Last manual refresh:</strong> <span style="color:#93c5fd;">${escapeHtml(manualRefreshedAt)}</span> <span style="opacity:.82;" data-age-from-ts="${escapeHtml(String(Number(lastManualHealthRefreshAt || Date.now())))}">${escapeHtml(String(manualRefreshedAge || '0s'))} ago</span></div>` : ''}<div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
       }
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
       if (Array.isArray(run.config?.workflowStages)) {
@@ -1704,6 +1724,7 @@ Hard constraints (do not echo these instructions in final output):
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
       detailContent.innerHTML = content;
+      restartDetailAgeTicker();
       detailContent.querySelectorAll('[data-refresh-health]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const original = btn.textContent;
