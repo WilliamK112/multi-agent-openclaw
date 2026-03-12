@@ -32,3 +32,15 @@ test("reorderSearchHits: applies task-type alignment boost", () => {
   const out = reorderSearchHits([general, programming], "debug this typescript function");
   assert.equal(out[0]?.id, "prog");
 });
+
+test("reorderSearchHits: keeps stable order for untimestamped equal-score hits", () => {
+  const a = makeHit("a", 0.3, Number.NaN, "general");
+  const b = makeHit("b", 0.3, Number.NaN, "general");
+  const c = makeHit("c", 0.3, Number.NaN, "general");
+
+  const out = reorderSearchHits([a, b, c], "plain note");
+  assert.deepEqual(
+    out.map((x) => x.id),
+    ["a", "b", "c"],
+  );
+});

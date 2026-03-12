@@ -402,3 +402,13 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: locks in core Phase 4 ranking behavior and reduces regression risk while iterating on retrieval heuristics.
 - Self-check: yes, this is a focused, shippable quality safeguard aligned with the roadmap.
 - Next immediate step: add a small guard test for empty/untimestamped hits to ensure stable sorting fallback behavior.
+
+## 2026-03-12 (heartbeat 05:52)
+
+- Added **stable-fallback reorder guard test** in `test/retrieval.test.ts`:
+  - New assertion verifies untimestamped equal-score hits preserve input order (`a,b,c`) after `reorderSearchHits(...)`.
+  - Uses `Number.NaN` timestamps to explicitly exercise fallback normalization path in recency scoring.
+- Verification: `npm test` passed (4 tests).
+- Why this matters: protects deterministic ordering for edge cases where recency metadata is missing or invalid.
+- Self-check: yes, this is a narrow, high-signal regression guard for Phase 4 reorder stability.
+- Next immediate step: add a tiny unit test confirming empty-hit input returns an empty array without mutation.
