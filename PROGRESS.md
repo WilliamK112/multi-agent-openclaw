@@ -509,3 +509,17 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: operators can now judge whether health data in run details is current versus stale during debugging.
 - Self-check: yes, this is a small, shippable reliability/UX improvement in the website quality loop.
 - Next immediate step: add auto-refresh action for system snapshot panel to fetch fresh `/healthz` without full page reload.
+
+## 2026-03-12 (heartbeat 09:50)
+
+- Implemented **manual health snapshot refresh action** in run details (`public/index.html`):
+  - Added `Refresh snapshot` button to the system snapshot panel.
+  - Wired button to re-run `/healthz` check (`detectOpenClawActive`) and rerender selected run details inline.
+  - Added loading/disabled state during refresh to prevent duplicate clicks.
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8793 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200`.
+- Why this matters: operators can fetch a current readiness snapshot from run details without a full page refresh.
+- Self-check: yes, this is a single, shippable website reliability UX improvement.
+- Next immediate step: show a small toast/timestamp confirming last manual refresh completion.

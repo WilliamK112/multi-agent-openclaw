@@ -1617,7 +1617,7 @@ Hard constraints (do not echo these instructions in final output):
         const healthTone = latestHealthSnapshot.degraded
           ? { bg: '#2a2212', border: '#7a5d2b', fg: '#f3d596', title: 'System snapshot (degraded)' }
           : { bg: '#13231a', border: '#2f6141', fg: '#9ee6b1', title: 'System snapshot (healthy)' };
-        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Snapshot age:</strong> <span style="color:${staleTone};font-weight:700;">${escapeHtml(snapshotAge)} ago</span> <span style="opacity:.82;">(checked ${escapeHtml(checkedAt)})</span></div><div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
+        content += `<details style="margin:8px 0;"><summary><strong>${healthTone.title}</strong></summary><div style="margin-top:6px;background:${healthTone.bg};color:${healthTone.fg};border:1px solid ${healthTone.border};padding:8px;border-radius:8px;font-size:.8rem;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div><strong>Status:</strong> ${escapeHtml(String(latestHealthSnapshot.status))}${latestHealthSnapshot.degraded ? ' (degraded)' : ''}</div><button class="clear-btn" data-refresh-health style="font-size:.72rem;padding:3px 8px;">Refresh snapshot</button></div><div><strong>Provider:</strong> ${escapeHtml(String(latestHealthSnapshot.provider))}</div><div><strong>Model:</strong> ${escapeHtml(String(latestHealthSnapshot.model))}</div><div><strong>Snapshot age:</strong> <span style="color:${staleTone};font-weight:700;">${escapeHtml(snapshotAge)} ago</span> <span style="opacity:.82;">(checked ${escapeHtml(checkedAt)})</span></div><div><strong>Degraded causes:</strong> ${escapeHtml(reasonText)}</div></div></details>`;
       }
       if (run.config) content += `<p><strong>Run Config:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.config, null, 2))}</pre>`;
       if (Array.isArray(run.config?.workflowStages)) {
@@ -1701,6 +1701,25 @@ Hard constraints (do not echo these instructions in final output):
       if (run.plan) content += `<p><strong>Plan:</strong></p><pre style="background:#09090b;padding:12px;border-radius:6px;overflow:auto;font-size:0.85rem;">${escapeHtml(JSON.stringify(run.plan, null, 2))}</pre>`;
       content += `<p><strong>Logs:</strong></p><div class="logs">${escapeHtml(run.logs.join('\n') || '(no logs yet)')}</div>`;
       detailContent.innerHTML = content;
+      detailContent.querySelectorAll('[data-refresh-health]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const original = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Refreshing…';
+          try {
+            await detectOpenClawActive();
+            const latest = await fetchRun(run.id);
+            renderDetail(latest);
+          } catch (e) {
+            alert(`Refresh failed: ${e.message}`);
+          } finally {
+            if (document.body.contains(btn)) {
+              btn.disabled = false;
+              btn.textContent = original;
+            }
+          }
+        });
+      });
       detailContent.querySelectorAll('[data-open-output-detail]').forEach(el => {
         el.addEventListener('click', async () => {
           try {
