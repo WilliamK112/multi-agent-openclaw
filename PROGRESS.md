@@ -537,3 +537,16 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: gives operators immediate visual confirmation that an inline health refresh actually completed.
 - Self-check: yes, this is a small, shippable reliability UX improvement in the website quality loop.
 - Next immediate step: include relative age next to "Last manual refresh" (e.g., "12s ago").
+
+## 2026-03-12 (heartbeat 10:10)
+
+- Implemented **relative-age label for manual health refresh** in run-details system snapshot (`public/index.html`):
+  - Added `manualRefreshedAge` computation from `lastManualHealthRefreshAt`.
+  - Updated `Last manual refresh` row to show both local timestamp and relative age (e.g., `10:10:22 AM (12s ago)`).
+- Verification:
+  - `npm test` passed (7 tests).
+  - Live site check passed: `curl -I https://multi-agent-openclaw-amber.vercel.app` → `200`.
+  - Local smoke check passed on fresh server (`PORT=8795 npm run dev:server`): `/runs?limit=1` → `200`; `/healthz` → `200`.
+- Why this matters: gives faster operator feedback on recency of manual status checks without mental timestamp math.
+- Self-check: yes, this is one focused, shippable UI reliability improvement.
+- Next immediate step: add subtle auto-update tick so ages refresh while details remain open.
