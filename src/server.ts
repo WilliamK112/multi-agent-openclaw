@@ -1386,14 +1386,26 @@ app.post("/run", (req, res) => {
 
       const retrievalHits = await retrieveContext(goal, 6).catch(() => []);
       const contextHints = hitsToHints(retrievalHits);
-      if (contextHints.length) pushLog(run, `[Memory] retrieved ${contextHints.length} context hits for planning`);
+      const contextSummary = retrievalHits.length
+        ? retrievalHits
+            .slice(0, 3)
+            .map((h: any) => `${h.kind || h.source}:${String(h.title || "").slice(0, 48)}`)
+            .join(" | ")
+        : "";
+      const plannerContextHints = contextSummary
+        ? [`Retrieved context summary: ${contextSummary}`, ...contextHints]
+        : contextHints;
+      if (plannerContextHints.length) {
+        pushLog(run, `[Memory] retrieved ${retrievalHits.length} context hits for planning`);
+        if (contextSummary) pushLog(run, `[Memory] context_summary=${contextSummary}`);
+      }
 
       const wfPlan = buildPaperPlanFromWorkflow(goal, run.config?.workflowStages);
       if (wfPlan) {
         run.plan = wfPlan;
         pushLog(run, `workflow_plan_override: using ${wfPlan.steps.length} workflow-derived steps`);
       } else {
-        run.plan = await planner(goal, provider, model, contextHints);
+        run.plan = await planner(goal, provider, model, plannerContextHints);
       }
 
       if (run.plan) {

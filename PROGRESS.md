@@ -335,3 +335,14 @@ Wire the new evidence domain model into API run artifacts, then render a minimal
 - Why this matters: creates auditable QA-fail snapshots and a structured handoff for iterative revision/debug loops.
 - Self-check: yes, this is a focused architecture improvement that makes failure analysis faster and safer.
 - Next immediate step: Context update loop (feed retrieved context summary into planner prompt more explicitly).
+
+## 2026-03-12 (heartbeat 00:52)
+
+- Implemented **Context update loop** refinement in planner handoff (`src/server.ts`):
+  - Added explicit `contextSummary` derived from top retrieval hits.
+  - Prepended summary as a planner hint (`Retrieved context summary: ...`) before detailed context hints.
+  - Added memory logs for both hit count and summary string to improve observability.
+- Verification: `npm test` passed.
+- Why this matters: improves planner grounding quality and closes the memory-to-planning loop with a concise, high-signal summary.
+- Self-check: yes, this is a focused, high-value improvement to cross-run context utilization.
+- Next immediate step: OpenAI embeddings migration (`text-embedding-3-small`) when API key is available.
