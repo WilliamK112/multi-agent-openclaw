@@ -224,3 +224,6 @@ Keep secrets local and out of git history.
    - test/verification notes
 
 Issues and focused PRs are welcome.
+
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
