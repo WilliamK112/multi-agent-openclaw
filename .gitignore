@@ -15,3 +15,10 @@ docs/runs_index.jsonl
 .runner_requests/
 job_history.json
 .vercel
+
+# Local ops / personal workflow artifacts (do not publish)
+HEARTBEAT.md
+PROGRESS.md
+memory/heartbeat-state.json
+docs/memory/*.jsonl
+.openclaw/
