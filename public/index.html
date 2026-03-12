@@ -1594,7 +1594,12 @@ Hard constraints (do not echo these instructions in final output):
         let label = `${formatAgeMs(ageMs)} ago`;
         const staleThresholdMs = Number(el.getAttribute('data-stale-threshold-ms') || 0);
         const isStale = Number.isFinite(staleThresholdMs) && staleThresholdMs > 0 && ageMs >= staleThresholdMs;
-        if (isStale) label += ' (stale)';
+        if (isStale) {
+          label += ' (stale)';
+          el.title = 'Stale: older than configured threshold';
+        } else {
+          el.title = 'Fresh snapshot age';
+        }
         el.textContent = label;
       });
     }
