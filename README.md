@@ -227,3 +227,6 @@ Issues and focused PRs are welcome.
 
 ## Contributing
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
+
+## Growth Plan
+See [STARSTRUCK_CAMPAIGN.md](STARSTRUCK_CAMPAIGN.md) for the ethical star-growth strategy.
