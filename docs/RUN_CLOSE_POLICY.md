@@ -61,6 +61,7 @@ When `close_allowed=false`:
 When `close_allowed=true`:
 1. Continue to execute/export stage.
 2. Persist gate result and reason in run summary metadata.
+3. Emit summary artifact using `docs/RUN_SUMMARY_TEMPLATE.md`.
 
 ---
 

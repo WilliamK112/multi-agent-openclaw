@@ -108,5 +108,6 @@ If multiple checks fail:
 4. If `REVISE`, dispatch packet to `revise.target_role` with `required_fixes` list.
 
 Run-close enforcement is defined in `docs/RUN_CLOSE_POLICY.md` (block completion unless gate `PASS` or explicit override).
+Retry/fallback behavior by failure class is defined in `docs/RETRY_FALLBACK_POLICY.md`.
 
 This file is the canonical manager gate contract until superseded by a versioned update.
