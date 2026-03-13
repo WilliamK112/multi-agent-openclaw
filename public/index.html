@@ -889,6 +889,35 @@
       return { ok: true, mode: 'browser', url: fileUrl };
     }
 
+    async function pauseRun(runId) {
+      const res = await fetch(`${API}/runs/${runId}/pause`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function resumeRun(runId) {
+      const res = await fetch(`${API}/runs/${runId}/resume`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function retryLastRunStep(runId) {
+      const res = await fetch(`${API}/runs/${runId}/retry-last`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function escalateRun(runId) {
+      const note = prompt('Escalation note (optional):', 'Operator escalation requested');
+      const res = await fetch(`${API}/runs/${runId}/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: note || 'Operator escalation requested' })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
     async function openRunOutputFolder(runId) {
       const res = await fetch(`${API}/runs/${runId}/open-output-folder`, { method: 'POST' });
       if (!res.ok) {
@@ -923,7 +952,7 @@
     }
 
     function statusClass(s) {
-      return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
+      return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'paused' || s === 'done' || s === 'error' ? s : '';
     }
 
     function assignmentPayload() {
@@ -1549,11 +1578,15 @@ Hard constraints (do not echo these instructions in final output):
               <span class="run-status ${statusClass(r.status)}">${r.status}${r.status === 'running' ? ' · live' : ''}</span>
               ${r.status === 'done' && (r.docxPath || r.exportMdPath) ? `<button class="open-output-btn" data-open-output="${r.id}" title="${escapeHtml(r.docxPath || r.exportMdPath)}">Open Final Essay</button>` : ''}
               ${r.status === 'done' ? `<button class="open-output-btn" data-open-output-folder="${r.id}" title="Reveal final essay file in Finder">Show Final in Finder</button>` : ''}
+              <button class="open-output-btn" data-op-pause="${r.id}">Pause</button>
+              <button class="open-output-btn" data-op-resume="${r.id}">Resume</button>
+              <button class="open-output-btn" data-op-retry="${r.id}">Retry Last</button>
+              <button class="open-output-btn" data-op-escalate="${r.id}">Escalate</button>
             </span>
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
           <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))} · paused=${r.paused?'yes':'no'} · escalations=${escapeHtml(String(r.escalation_count ?? 0))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -1577,6 +1610,30 @@ Hard constraints (do not echo these instructions in final output):
           } catch (e) {
             alert(e.message);
           }
+        });
+      });
+      runsList.querySelectorAll('[data-op-pause]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try { await pauseRun(el.dataset.opPause); await refresh(); } catch (e) { alert(e.message); }
+        });
+      });
+      runsList.querySelectorAll('[data-op-resume]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try { await resumeRun(el.dataset.opResume); await refresh(); } catch (e) { alert(e.message); }
+        });
+      });
+      runsList.querySelectorAll('[data-op-retry]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try { await retryLastRunStep(el.dataset.opRetry); await refresh(); } catch (e) { alert(e.message); }
+        });
+      });
+      runsList.querySelectorAll('[data-op-escalate]').forEach(el => {
+        el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try { await escalateRun(el.dataset.opEscalate); await refresh(); } catch (e) { alert(e.message); }
         });
       });
     }

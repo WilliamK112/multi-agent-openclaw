@@ -14,7 +14,7 @@ import { saveRunContext, getRecentContexts } from "./memory/context";
 import { retrieveContext, hitsToHints, searchMemory } from "./memory/retrieval";
 import { selectExecutionModel } from "./llm/selector";
 
-type RunStatus = "queued" | "running" | "needs_approval" | "done" | "error";
+type RunStatus = "queued" | "running" | "needs_approval" | "paused" | "done" | "error";
 
 type RoleAssignments = {
   main?: string | string[];
@@ -137,6 +137,11 @@ type RunRecord = {
     marker: string;
     retryCount: number;
   } | null;
+  operator?: {
+    paused?: boolean;
+    escalations?: Array<{ at: string; note: string }>;
+    lastAction?: string;
+  };
 };
 
 const app = express();
@@ -778,6 +783,11 @@ async function continueRun(runId: string) {
   if (!run.plan) return;
   if (run.isProcessing) return;
 
+  if (run.operator?.paused) {
+    run.status = "paused";
+    return;
+  }
+
   run.isProcessing = true;
   run.status = "running";
   if (run.nextStepIndex === 0 && run.config?.roleAssignments) {
@@ -799,6 +809,13 @@ async function continueRun(runId: string) {
 
   try {
     for (let i = run.nextStepIndex; i < run.plan.steps.length; i++) {
+      if (run.operator?.paused) {
+        run.status = "paused";
+        pushLog(run, "operator: paused");
+        run.isProcessing = false;
+        return;
+      }
+
       const step = run.plan.steps[i];
 
       if (needsApprovalForStep(step) && !run.approvedStepIds.includes(step.id)) {
@@ -1568,6 +1585,70 @@ app.post("/runs/:runId/approve", async (req, res) => {
   return res.json({ ok: true, runId: run.id, status: run.status });
 });
 
+app.post("/runs/:runId/pause", (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  run.operator = {
+    ...(run.operator ?? {}),
+    paused: true,
+    lastAction: "pause",
+  };
+  if (run.status === "running" || run.status === "queued") run.status = "paused";
+  pushLog(run, "operator_control: pause requested");
+  return res.json({ ok: true, runId: run.id, status: run.status, paused: true });
+});
+
+app.post("/runs/:runId/resume", (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  run.operator = {
+    ...(run.operator ?? {}),
+    paused: false,
+    lastAction: "resume",
+  };
+  if (run.status === "paused") run.status = "queued";
+  pushLog(run, "operator_control: resume requested");
+  if (!run.isProcessing && run.status !== "done" && run.status !== "error") {
+    void continueRun(run.id);
+  }
+  return res.json({ ok: true, runId: run.id, status: run.status, paused: false });
+});
+
+app.post("/runs/:runId/retry-last", (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  if (!run.plan || !run.plan.steps?.length) return res.status(400).json({ error: "Run has no plan" });
+  const previousIndex = Math.max(0, (run.nextStepIndex ?? 1) - 1);
+  run.nextStepIndex = previousIndex;
+  run.status = "queued";
+  run.pendingStepId = null;
+  run.pendingReason = null;
+  run.pendingTool = null;
+  run.operator = {
+    ...(run.operator ?? {}),
+    lastAction: "retry-last",
+  };
+  pushLog(run, `operator_control: retry_last step_index=${previousIndex}`);
+  if (!run.operator?.paused && !run.isProcessing) {
+    void continueRun(run.id);
+  }
+  return res.json({ ok: true, runId: run.id, status: run.status, nextStepIndex: run.nextStepIndex });
+});
+
+app.post("/runs/:runId/escalate", (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const note = String(req.body?.note ?? "Operator escalation requested").trim() || "Operator escalation requested";
+  const entry = { at: new Date().toISOString(), note };
+  run.operator = {
+    ...(run.operator ?? {}),
+    escalations: [...(run.operator?.escalations ?? []), entry],
+    lastAction: "escalate",
+  };
+  pushLog(run, `operator_control: escalate note=${note.slice(0, 300)}`);
+  return res.json({ ok: true, runId: run.id, status: run.status, escalation: entry });
+});
+
 app.get("/runs", (req, res) => {
   const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
   const list = Array.from(runs.values())
@@ -1610,6 +1691,9 @@ app.get("/runs", (req, res) => {
       close_allowed: (r.artifacts as any)?.run_close_check?.close_allowed ?? null,
       close_reason: (r.artifacts as any)?.run_close_check?.close_reason ?? null,
       run_summary_path: (r.artifacts as any)?.run_summary_path ?? null,
+      paused: Boolean(r.operator?.paused),
+      operator_last_action: r.operator?.lastAction ?? null,
+      escalation_count: Array.isArray(r.operator?.escalations) ? r.operator.escalations.length : 0,
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
       sources_count: r.artifacts?.sources_count ?? null,
       sources_count_final: (r.artifacts as any)?.sources_count_final ?? null,

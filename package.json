@@ -7,7 +7,8 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "check:provider": "node scripts/provider-check.mjs",
-    "dev:server": "tsx src/server.ts"
+    "dev:server": "tsx src/server.ts",
+    "benchmark:quality": "node scripts/quality-benchmark.mjs"
   },
   "keywords": [],
   "author": "",
