@@ -112,6 +112,13 @@ type RunRecord = {
     facts_count?: number;
     evidenceBundlePath?: string;
     unsupported_claims_count?: number;
+    run_close_check?: {
+      gate_verdict: "PASS" | "REVISE";
+      override_note: string | null;
+      close_allowed: boolean;
+      close_reason: "PASS_VERDICT" | "OVERRIDE" | "BLOCKED_BY_GATE";
+    };
+    run_summary_path?: string;
   };
   pendingStepId: string | null;
   pendingReason: string | null;
@@ -1105,6 +1112,66 @@ async function continueRun(runId: string) {
     if (!gatePassed && docxExists) {
       pushLog(run, "export:docx_kept_even_when_gate_failed");
     }
+
+    const runCloseCheck = {
+      gate_verdict: gatePassed ? "PASS" as const : "REVISE" as const,
+      override_note: null as string | null,
+      close_allowed: gatePassed,
+      close_reason: gatePassed ? "PASS_VERDICT" as const : "BLOCKED_BY_GATE" as const,
+    };
+
+    const runSummaryPath = path.join(process.cwd(), `docs/exports/${run.id}.run_summary.json`);
+    const runSummary = {
+      run_id: run.id,
+      completed_at: new Date().toISOString(),
+      goal: run.goal,
+      status: gatePassed ? "PASS" : "REVISE",
+      gate: {
+        verdict: runCloseCheck.gate_verdict,
+        close_reason: runCloseCheck.close_reason,
+        gate_report_path: path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`),
+        override_note: runCloseCheck.override_note,
+      },
+      changes: [
+        {
+          id: "CHG-1",
+          summary: "Generated and evaluated final draft with QA gate checks",
+          artifact_paths: [expectedDraft, expectedMd, expectedDocx].filter(Boolean),
+          owner_role: "qa_judge",
+        },
+      ],
+      evidence: [
+        {
+          claim_or_decision: "Gate decision based on rubric + evidence/citation checks",
+          support: [path.join(process.cwd(), `docs/exports/${run.id}.judge.v2.json`), path.join(process.cwd(), `docs/exports/${run.id}.evidence.json`)],
+        },
+      ],
+      risks: (gateReasons.length ? gateReasons : ["none"]).slice(0, 8).map((r, i) => ({
+        id: `RISK-${i + 1}`,
+        level: gatePassed ? "low" : "high",
+        description: String(r),
+        mitigation: gatePassed ? "Monitor in next benchmark cycle" : "Resolve via REVISE routing and re-run gate",
+      })),
+      next_actions: gatePassed
+        ? [
+            {
+              id: "NEXT-1",
+              owner_role: "executor",
+              action: "Archive outputs and include in benchmark window",
+              due_hint: "next-run",
+            },
+          ]
+        : [
+            {
+              id: "NEXT-1",
+              owner_role: "qa_judge",
+              action: `Address gate failures: ${(gateReasons || []).slice(0, 5).join(", ") || "unknown"}`,
+              due_hint: "now",
+            },
+          ],
+    };
+    await fsp.writeFile(runSummaryPath, JSON.stringify(runSummary, null, 2), "utf8").catch(() => undefined);
+
     await fsp.writeFile(path.join(process.cwd(), `docs/exports/${run.id}.judge.json`), JSON.stringify({ judge_v1: judge_v1_rubric, judge_v2: judge_v2_rubric }, null, 2), "utf8").catch(() => undefined);
 
     const evidenceBundle = validateWorkflowEvidenceBundle(buildEvidenceBundleFromMarkdown(run.id, finalMdText, researchText));
@@ -1155,6 +1222,8 @@ async function continueRun(runId: string) {
       facts_count: factsCount,
       evidenceBundlePath,
       unsupported_claims_count: unsupportedClaims.length,
+      run_close_check: runCloseCheck,
+      run_summary_path: runSummaryPath,
       unsupported_claims_sample: unsupportedClaims.slice(0, 8).map((c) => {
         const linksForClaim = evidenceBundle.links.filter((l) => l.claimId === c.id);
         const linkedSources = linksForClaim
@@ -1538,6 +1607,9 @@ app.get("/runs", (req, res) => {
       top_delta: r.artifacts?.top_delta_effective ?? (r.artifacts?.top_delta_raw ?? getTopDeltaFromMap(r.artifacts?.judge_delta)),
       gate: r.artifacts?.judge_v2?.must_fix_gate ?? null,
       gateReasons: Array.isArray(r.artifacts?.gateReasons) ? r.artifacts.gateReasons.slice(0,2) : [],
+      close_allowed: (r.artifacts as any)?.run_close_check?.close_allowed ?? null,
+      close_reason: (r.artifacts as any)?.run_close_check?.close_reason ?? null,
+      run_summary_path: (r.artifacts as any)?.run_summary_path ?? null,
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
       sources_count: r.artifacts?.sources_count ?? null,
       sources_count_final: (r.artifacts as any)?.sources_count_final ?? null,
@@ -1656,6 +1728,17 @@ app.get("/runs/:runId/evidence-file", async (req, res) => {
   if (!evidencePath) return res.status(404).json({ error: "Evidence bundle not found" });
 
   const resolved = await resolveWhitelistedOutputPathByPath(evidencePath, run);
+  if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
+  return res.download(resolved.real, path.basename(resolved.real));
+});
+
+app.get("/runs/:runId/summary-file", async (req, res) => {
+  const run = runs.get(req.params.runId);
+  if (!run) return res.status(404).json({ error: "Run not found" });
+  const summaryPath = (run.artifacts as any)?.run_summary_path;
+  if (!summaryPath) return res.status(404).json({ error: "Run summary not found" });
+
+  const resolved = await resolveWhitelistedOutputPathByPath(summaryPath, run);
   if (resolved.error || !resolved.real) return res.status(resolved.code).json({ error: resolved.error });
   return res.download(resolved.real, path.basename(resolved.real));
 });

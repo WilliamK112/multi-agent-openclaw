@@ -2,6 +2,12 @@ import path from "node:path";
 import { planner } from "./agents/planner";
 import { executor } from "./agents/executor";
 import { qa } from "./agents/qa";
+import {
+  validateExecutorStepOutput,
+  validatePlannerOutput,
+  validateQAOutput,
+  type ValidationResult,
+} from "./agents/validation";
 import { classifyTask } from "./domain/task";
 import { selectExecutionModel, selectPlanningModel } from "./llm/selector";
 import { saveRunContext } from "./memory/context";
@@ -11,6 +17,7 @@ export type RunHooks = {
   onPlan?: (plan: any) => void;
   onStep?: (info: any) => void;
   onQA?: (qa: any) => void;
+  onValidation?: (result: ValidationResult) => void;
 };
 
 export type TaskSystemRunOptions = {
@@ -79,9 +86,19 @@ export class TaskSystem {
     let qaResult: any = null;
     let status = "error";
 
+    const emitValidation = (result: ValidationResult) => {
+      hooks?.onValidation?.(result);
+      const marker = result.valid ? "valid" : "invalid";
+      log(`[Validation] ${result.agent}=${marker}${result.errors.length ? ` errors=${result.errors.join(" | ")}` : ""}`);
+      if (!result.valid) {
+        throw new Error(`[Validation:${result.agent}] ${result.errors.join("; ")}`);
+      }
+    };
+
     try {
       hooks?.onLog?.("planner:start");
       plan = await planner(goal, planningModel.provider, planningModel.model);
+      emitValidation(validatePlannerOutput(plan));
       hooks?.onPlan?.(plan);
       hooks?.onLog?.("planner:done");
 
@@ -95,6 +112,7 @@ export class TaskSystem {
           taskType: task.type,
           complexity: task.complexity,
         });
+        emitValidation(validateExecutorStepOutput(result));
         hooks?.onStep?.({
           stepId: step.id,
           objective: step.objective,
@@ -105,6 +123,7 @@ export class TaskSystem {
       }
 
       qaResult = await qa(root);
+      emitValidation(validateQAOutput(qaResult));
       hooks?.onQA?.(qaResult);
       hooks?.onLog?.("qa:done");
 

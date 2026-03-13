@@ -910,6 +910,18 @@
       return { ok: true, mode: 'browser', url: fileUrl };
     }
 
+    async function openSummaryFile(runId) {
+      const fileUrl = `${API}/runs/${runId}/summary-file`;
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return { ok: true, mode: 'browser', url: fileUrl };
+    }
+
     function statusClass(s) {
       return s === 'queued' || s === 'running' || s === 'needs_approval' || s === 'done' || s === 'error' ? s : '';
     }
@@ -1541,7 +1553,7 @@ Hard constraints (do not echo these instructions in final output):
           </div>
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
           <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -1666,7 +1678,7 @@ Hard constraints (do not echo these instructions in final output):
       const docxExists = !!run.artifacts?.docxExists;
       const tdRaw = run.artifacts?.top_delta_raw || run.top_delta_raw || run.top_delta || null;
       const tdEff = run.artifacts?.top_delta_effective || run.top_delta_effective || tdRaw;
-      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Citation Quality Score:</strong> ${escapeHtml(String(run.artifacts?.citation_quality_score ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}</p>`;
+      content += `<p><strong>Top Δ (raw):</strong> ${tdRaw ? `${escapeHtml(String(tdRaw.dimension ?? '—'))}:${escapeHtml(String(tdRaw.delta ?? '—'))}` : '—'}<br><strong>Top Δ (effective):</strong> ${tdEff ? `${escapeHtml(String(tdEff.dimension ?? '—'))}:${escapeHtml(String(tdEff.delta ?? '—'))}` : '—'}<br><strong>Facts Count:</strong> ${escapeHtml(String(run.artifacts?.facts_count ?? run.facts_count ?? '—'))}<br><strong>Citation Quality Score:</strong> ${escapeHtml(String(run.artifacts?.citation_quality_score ?? '—'))}<br><strong>Unsupported Claims:</strong> ${escapeHtml(String(run.artifacts?.unsupported_claims_count ?? run.unsupported_claims_count ?? '—'))}<br><strong>Run Close:</strong> ${run.artifacts?.run_close_check ? `${run.artifacts.run_close_check.close_allowed ? 'allowed' : 'blocked'} (${escapeHtml(String(run.artifacts.run_close_check.close_reason || '—'))})` : '—'}<br><strong>Run Summary Artifact:</strong> <code>${escapeHtml(String(run.artifacts?.run_summary_path || '—'))}</code></p>`;
       const unsupportedSample = Array.isArray(run.artifacts?.unsupported_claims_sample) ? run.artifacts.unsupported_claims_sample : [];
       if (unsupportedSample.length) {
         const sortedSample = [...unsupportedSample].sort((a, b) => Number(b.missing_link_count ?? 0) - Number(a.missing_link_count ?? 0));
@@ -1699,6 +1711,9 @@ Hard constraints (do not echo these instructions in final output):
       }
       if (run.artifacts?.evidenceBundlePath) {
         content += `<p><strong>Evidence Bundle:</strong> <code>${escapeHtml(String(run.artifacts.evidenceBundlePath))}</code> <button class="open-output-btn" data-open-evidence-detail="${escapeHtml(run.id)}">Open Evidence JSON</button></p>`;
+      }
+      if (run.artifacts?.run_summary_path) {
+        content += `<p><strong>Run Summary:</strong> <code>${escapeHtml(String(run.artifacts.run_summary_path))}</code> <button class="open-output-btn" data-open-summary-detail="${escapeHtml(run.id)}">Open Run Summary JSON</button></p>`;
       }
       if (j1 || j2) {
         const dims = ['thesis_prompt','structure_coherence','evidence_specificity','counterarguments_nuance','clarity_style','citations_integrity'];
@@ -1768,6 +1783,15 @@ Hard constraints (do not echo these instructions in final output):
         el.addEventListener('click', async () => {
           try {
             await openEvidenceFile(el.dataset.openEvidenceDetail);
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
+      detailContent.querySelectorAll('[data-open-summary-detail]').forEach(el => {
+        el.addEventListener('click', async () => {
+          try {
+            await openSummaryFile(el.dataset.openSummaryDetail);
           } catch (e) {
             alert(e.message);
           }
