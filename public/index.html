@@ -619,6 +619,7 @@
       <div id="runs-list"></div>
       <div id="detail-panel" class="detail-panel" style="display: none;">
         <h3>Run details</h3>
+        <div id="detail-recommendation-header" style="display:none;margin:-8px 0 10px;font-size:.78rem;color:#cbd5e1;padding:8px 10px;border:1px solid #334155;border-radius:8px;background:#0f172a;"></div>
         <div id="detail-actions" class="detail-actions"></div>
         <div id="detail-content"></div>
       </div>
@@ -738,6 +739,7 @@
     const rolesGridEl = document.getElementById('roles-grid');
     const roleJsonPreviewEl = document.getElementById('role-json-preview');
     const detailActions = document.getElementById('detail-actions');
+    const detailRecommendationHeader = document.getElementById('detail-recommendation-header');
     const detailContent = document.getElementById('detail-content');
     const trendWindowEl = document.getElementById('trend-window');
     const trendFilterEl = document.getElementById('trend-filter');
@@ -1516,6 +1518,31 @@ Hard constraints (do not echo these instructions in final output):
           : '<span style="color:#a1a1aa">□</span>').join('');
     }
 
+    function getOperatorRecommendation(run) {
+      const gateFailed = run?.gate === false;
+      const paused = Boolean(run?.paused);
+      const escalations = Number(run?.escalation_count ?? 0);
+
+      if (paused) {
+        return { badge: 'PAUSED', tone: 'info', color: '#93c5fd', bg: 'rgba(30,64,175,.22)', text: 'Run is paused. Review gate reasons and retry route, then resume when ready.', why: 'Selected because run is currently paused.' };
+      }
+      if (gateFailed && escalations >= 1) {
+        return { badge: 'ESCALATE', tone: 'danger', color: '#fca5a5', bg: 'rgba(127,29,29,.28)', text: 'Gate still failing after escalation signal. Prefer escalation + human review.', why: 'Selected because gate is failing and escalation count is already >= 1.' };
+      }
+      if (gateFailed) {
+        return { badge: 'RETRY', tone: 'warn', color: '#fcd34d', bg: 'rgba(120,53,15,.28)', text: 'Gate failed. Use Retry Last to follow mapped failure-class route.', why: 'Selected because gate is failing without escalation yet.' };
+      }
+      return { badge: 'STABLE', tone: 'good', color: '#86efac', bg: 'rgba(20,83,45,.25)', text: 'Run looks stable. Keep monitoring gate + close status.', why: 'Selected because gate is passing and no pause/escalation flags are active.' };
+    }
+
+    function getOperatorRecommendationShortWhy(run) {
+      const rec = getOperatorRecommendation(run);
+      if (rec.badge === 'PAUSED') return 'why: paused by operator';
+      if (rec.badge === 'ESCALATE') return 'why: gate fail + escalation signal';
+      if (rec.badge === 'RETRY') return 'why: gate fail, retry route available';
+      return 'why: gate healthy, no pause/escalation';
+    }
+
     function renderOperatorHelpPanel(runsWindow) {
       if (!operatorHelpPanel) return;
       const latest = Array.isArray(runsWindow) && runsWindow.length ? runsWindow[0] : null;
@@ -1531,13 +1558,7 @@ Hard constraints (do not echo these instructions in final output):
         ? `${String(latest.operator_retry_route.failure_class || '—')}→${String(latest.operator_retry_route.target_role || '—')}`
         : '—';
 
-      const recommendation = paused
-        ? { badge: 'PAUSED', tone: 'info', color: '#93c5fd', bg: 'rgba(30,64,175,.22)', text: 'Run is paused. Review gate reasons and retry route, then resume when ready.', why: 'Selected because run is currently paused.' }
-        : gateFailed && escalations >= 1
-          ? { badge: 'ESCALATE', tone: 'danger', color: '#fca5a5', bg: 'rgba(127,29,29,.28)', text: 'Gate still failing after escalation signal. Prefer escalation + human review.', why: 'Selected because gate is failing and escalation count is already >= 1.' }
-          : gateFailed
-            ? { badge: 'RETRY', tone: 'warn', color: '#fcd34d', bg: 'rgba(120,53,15,.28)', text: 'Gate failed. Use Retry Last to follow mapped failure-class route.', why: 'Selected because gate is failing without escalation yet.' }
-            : { badge: 'STABLE', tone: 'good', color: '#86efac', bg: 'rgba(20,83,45,.25)', text: 'Run looks stable. Keep monitoring gate + close status.', why: 'Selected because gate is passing and no pause/escalation flags are active.' };
+      const recommendation = getOperatorRecommendation(latest);
 
       operatorHelpPanel.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -1698,7 +1719,7 @@ Hard constraints (do not echo these instructions in final output):
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
           <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
           <div class="run-meta">ETA: <strong data-eta-countdown="${r.id}" data-eta-status="${escapeHtml(String(r.status || 'queued'))}" data-eta-target="${(() => { const etaSec = estimateEtaSeconds(r); const fp = `${r.status}|${r.nextStepIndex}|${r.plannedSteps}|${r.gate}|${r.paused}`; const prev = etaStateByRun[r.id]; if (!prev || prev.fp !== fp) { etaStateByRun[r.id] = { fp, target: etaSec == null ? 0 : (Date.now() + etaSec * 1000) }; } return etaStateByRun[r.id].target; })()}">estimating…</strong></div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))} · paused=${r.paused?'yes':'no'} · escalations=${escapeHtml(String(r.escalation_count ?? 0))} · retry_route=${r.operator_retry_route ? `${escapeHtml(String(r.operator_retry_route.failure_class || '—'))}->${escapeHtml(String(r.operator_retry_route.target_role || '—'))}` : '—'}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))} · paused=${r.paused?'yes':'no'} · escalations=${escapeHtml(String(r.escalation_count ?? 0))} · retry_route=${r.operator_retry_route ? `${escapeHtml(String(r.operator_retry_route.failure_class || '—'))}->${escapeHtml(String(r.operator_retry_route.target_role || '—'))}` : '—'} · ${escapeHtml(getOperatorRecommendationShortWhy(r))}</div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -1804,6 +1825,13 @@ Hard constraints (do not echo these instructions in final output):
 
     function renderDetail(run) {
       detailPanel.style.display = 'block';
+
+      if (detailRecommendationHeader) {
+        const recommendation = getOperatorRecommendation(run);
+        detailRecommendationHeader.style.display = 'block';
+        detailRecommendationHeader.innerHTML = `<strong style="color:${recommendation.color};">Recommendation: ${recommendation.badge}</strong> — ${escapeHtml(recommendation.why)}`;
+      }
+
       let actionsHtml = '';
       if (run.status === 'needs_approval' && run.pendingStepId) {
         actionsHtml = `<button class="btn-success" id="approve-btn">Approve step: ${run.pendingStepId}</button>`;
