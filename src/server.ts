@@ -1737,6 +1737,8 @@ app.get("/runs", (req, res) => {
       operator_last_action: r.operator?.lastAction ?? null,
       escalation_count: Array.isArray(r.operator?.escalations) ? r.operator.escalations.length : 0,
       operator_retry_route: (r.artifacts as any)?.operator_retry_route ?? null,
+      nextStepIndex: Number(r.nextStepIndex ?? 0),
+      plannedSteps: Number(r.plan?.steps?.length ?? 0),
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
       sources_count: r.artifacts?.sources_count ?? null,
       sources_count_final: (r.artifacts as any)?.sources_count_final ?? null,
