@@ -106,4 +106,6 @@ Single source of truth for role boundaries in `multi-agent-openclaw`.
 ## Adoption note
 This contract should be referenced by workflow recommendations and role prompt generation to keep runtime behavior aligned.
 
-Related: use `docs/HANDOFF_PACKET_TEMPLATE.md` as the required stage-to-stage handoff structure.
+Related:
+- use `docs/HANDOFF_PACKET_TEMPLATE.md` as the required stage-to-stage handoff structure.
+- use `docs/MANAGER_QUALITY_GATE.md` for deterministic pass/fail gate + `REVISE` routing.
