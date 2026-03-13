@@ -203,6 +203,21 @@ function asArray(v: unknown): string[] {
   return [];
 }
 
+function classifyFailureClassFromGateReasons(gateReasons: string[] = []): "evidence" | "coherence" | "citation" | "format" {
+  const text = gateReasons.join(" ").toLowerCase();
+  if (/citation|works_cited|mla|source/.test(text)) return "citation";
+  if (/unsupported|evidence|facts|domain|duplicate_ratio/.test(text)) return "evidence";
+  if (/format|heading|template|prompt_echo|placeholder/.test(text)) return "format";
+  return "coherence";
+}
+
+function targetRoleForFailureClass(fc: "evidence" | "coherence" | "citation" | "format") {
+  if (fc === "evidence") return "researcher";
+  if (fc === "citation") return "citation_editor";
+  if (fc === "format") return "executor";
+  return "synthesizer";
+}
+
 function normalizeRoleAssignments(input?: RoleAssignments): RoleAssignments | undefined {
   if (!input) return undefined;
   const main = asArray(input.main)[0] ?? "none";
@@ -1624,15 +1639,32 @@ app.post("/runs/:runId/retry-last", (req, res) => {
   run.pendingStepId = null;
   run.pendingReason = null;
   run.pendingTool = null;
+
+  const gateReasons = Array.isArray(run.artifacts?.gateReasons) ? run.artifacts!.gateReasons : [];
+  const failureClass = classifyFailureClassFromGateReasons(gateReasons);
+  const targetRole = targetRoleForFailureClass(failureClass);
+
+  run.artifacts = {
+    ...(run.artifacts ?? {}),
+    operator_retry_route: {
+      failure_class: failureClass,
+      target_role: targetRole,
+      gate_status_transition: "BLOCKED_BY_GATE->RETRY_PENDING",
+      at: new Date().toISOString(),
+      source: "retry-last",
+    } as any,
+  } as any;
+
   run.operator = {
     ...(run.operator ?? {}),
     lastAction: "retry-last",
   };
   pushLog(run, `operator_control: retry_last step_index=${previousIndex}`);
+  pushLog(run, `operator_retry_route: failure_class=${failureClass} target_role=${targetRole} transition=BLOCKED_BY_GATE->RETRY_PENDING`);
   if (!run.operator?.paused && !run.isProcessing) {
     void continueRun(run.id);
   }
-  return res.json({ ok: true, runId: run.id, status: run.status, nextStepIndex: run.nextStepIndex });
+  return res.json({ ok: true, runId: run.id, status: run.status, nextStepIndex: run.nextStepIndex, failure_class: failureClass, target_role: targetRole });
 });
 
 app.post("/runs/:runId/escalate", (req, res) => {
@@ -1645,7 +1677,17 @@ app.post("/runs/:runId/escalate", (req, res) => {
     escalations: [...(run.operator?.escalations ?? []), entry],
     lastAction: "escalate",
   };
+  run.artifacts = {
+    ...(run.artifacts ?? {}),
+    operator_retry_route: {
+      ...((run.artifacts as any)?.operator_retry_route ?? {}),
+      gate_status_transition: "RETRY_PENDING->ESCALATED",
+      escalated_at: entry.at,
+      escalation_note: note,
+    } as any,
+  } as any;
   pushLog(run, `operator_control: escalate note=${note.slice(0, 300)}`);
+  pushLog(run, "operator_retry_route: transition=RETRY_PENDING->ESCALATED");
   return res.json({ ok: true, runId: run.id, status: run.status, escalation: entry });
 });
 
@@ -1694,6 +1736,7 @@ app.get("/runs", (req, res) => {
       paused: Boolean(r.operator?.paused),
       operator_last_action: r.operator?.lastAction ?? null,
       escalation_count: Array.isArray(r.operator?.escalations) ? r.operator.escalations.length : 0,
+      operator_retry_route: (r.artifacts as any)?.operator_retry_route ?? null,
       anti_overfitting_applied: Boolean(r.config?.anti_overfitting_applied),
       sources_count: r.artifacts?.sources_count ?? null,
       sources_count_final: (r.artifacts as any)?.sources_count_final ?? null,
