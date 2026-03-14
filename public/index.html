@@ -619,7 +619,10 @@
       <div id="operator-help-panel" style="margin:10px 0 12px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:10px 12px;font-size:.78rem;line-height:1.5;color:#cbd5e1;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
           <div style="font-weight:700;color:#93c5fd;">Operator Decision Flow</div>
-          <button id="condensed-meta-toggle" class="clear-btn" style="font-size:.72rem;padding:3px 8px;">Condensed meta: OFF</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button id="condensed-meta-toggle" class="clear-btn" style="font-size:.72rem;padding:3px 8px;">Condensed meta: OFF</button>
+            <button id="condensed-meta-auto-btn" class="clear-btn" style="font-size:.72rem;padding:3px 8px;">Auto mode</button>
+          </div>
         </div>
         <div>1) <strong>Pause</strong> if quality is drifting or retries look noisy.</div>
         <div>2) Check <strong>gate reasons</strong> + <strong>retry route</strong>.</div>
@@ -644,6 +647,7 @@
     let etaTickInterval = null;
     let detailAgeTickInterval = null;
     let condensedMetaMode = false;
+    const CONDENSED_META_STORAGE_KEY = 'openclaw.condensedMetaMode';
     let allRunsCache = [];
     let trendWindow = 50;
     let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
@@ -747,6 +751,7 @@
     const runsList = document.getElementById('runs-list');
     const operatorHelpPanel = document.getElementById('operator-help-panel');
     const condensedMetaToggleBtn = document.getElementById('condensed-meta-toggle');
+    const condensedMetaAutoBtn = document.getElementById('condensed-meta-auto-btn');
     const detailPanel = document.getElementById('detail-panel');
     const availableAgentsEl = document.getElementById('available-agents');
     const rolesGridEl = document.getElementById('roles-grid');
@@ -1683,12 +1688,24 @@ Hard constraints (do not echo these instructions in final output):
       return remainingSteps * perStep + queuedPenalty + pausedPenalty;
     }
 
-    function setCondensedMetaMode(on) {
+    function setCondensedMetaMode(on, options = {}) {
+      const persist = options.persist !== false;
       condensedMetaMode = Boolean(on);
       document.body.classList.toggle('compact-run-meta', condensedMetaMode);
       if (condensedMetaToggleBtn) {
         condensedMetaToggleBtn.textContent = `Condensed meta: ${condensedMetaMode ? 'ON' : 'OFF'}`;
       }
+      if (persist) {
+        try {
+          localStorage.setItem(CONDENSED_META_STORAGE_KEY, condensedMetaMode ? '1' : '0');
+        } catch (_) {}
+      }
+    }
+
+    function applyAutoCondensedMetaMode() {
+      try { localStorage.removeItem(CONDENSED_META_STORAGE_KEY); } catch (_) {}
+      const useCondensed = Boolean(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+      setCondensedMetaMode(useCondensed, { persist: false });
     }
 
     function formatCountdown(totalSeconds) {
@@ -2512,14 +2529,26 @@ Hard constraints (do not echo these instructions in final output):
 
     if (condensedMetaToggleBtn) {
       condensedMetaToggleBtn.addEventListener('click', () => {
-        setCondensedMetaMode(!condensedMetaMode);
+        setCondensedMetaMode(!condensedMetaMode, { persist: true });
       });
     }
-    // Optional mobile-first default (no persistence yet): start condensed on narrow viewports.
-    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
-      setCondensedMetaMode(true);
+    if (condensedMetaAutoBtn) {
+      condensedMetaAutoBtn.addEventListener('click', () => {
+        applyAutoCondensedMetaMode();
+      });
+    }
+
+    // Persisted preference: if absent, fall back to mobile-first default.
+    let savedCondensedPreference = null;
+    try {
+      const raw = localStorage.getItem(CONDENSED_META_STORAGE_KEY);
+      if (raw === '1' || raw === '0') savedCondensedPreference = raw;
+    } catch (_) {}
+
+    if (savedCondensedPreference != null) {
+      setCondensedMetaMode(savedCondensedPreference === '1', { persist: false });
     } else {
-      setCondensedMetaMode(false);
+      applyAutoCondensedMetaMode();
     }
 
     detectOpenClawActive();
