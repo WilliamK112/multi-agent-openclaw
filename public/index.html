@@ -273,6 +273,19 @@
       transform: translateY(1px);
       filter: brightness(1.05);
     }
+    @media (prefers-reduced-motion: reduce) {
+      #condensed-meta-state {
+        transition: none !important;
+        animation: none !important;
+      }
+      #condensed-meta-state:active {
+        transform: none;
+        filter: none;
+      }
+      #condensed-meta-state:focus-visible {
+        box-shadow: none;
+      }
+    }
     @media (max-width: 900px) {
       .run-meta .meta-tight { white-space:normal; align-items:flex-start; }
       body:not(.compact-run-meta) .run-meta-optional { display:none; }
@@ -631,7 +644,7 @@
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <button id="condensed-meta-toggle" class="clear-btn" style="font-size:.72rem;padding:3px 8px;" title="Toggle condensed meta and save this preference for future sessions.">Condensed meta: OFF</button>
             <button id="condensed-meta-auto-btn" class="clear-btn" style="font-size:.72rem;padding:3px 8px;" title="Reset to automatic viewport behavior (clears saved condensed preference).">Auto mode</button>
-            <span id="condensed-meta-state" role="button" tabindex="0" aria-label="Toggle condensed meta mode" style="font-size:.72rem;opacity:.85;padding:2px 8px;border:1px solid #334155;border-radius:999px;cursor:pointer;user-select:none;">Mode: auto</span>
+            <span id="condensed-meta-state" role="button" tabindex="0" aria-label="Toggle condensed meta mode" aria-describedby="condensed-meta-kbd-hint" style="font-size:.72rem;opacity:.85;padding:2px 8px;border:1px solid #334155;border-radius:999px;cursor:pointer;user-select:none;">Mode: auto</span>
             <span id="condensed-meta-kbd-hint" style="font-size:.68rem;opacity:.72;">Tip: Enter/Space toggles mode</span>
             <span id="condensed-meta-sr-status" aria-live="polite" aria-atomic="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">Condensed meta mode ready.</span>
           </div>
@@ -641,6 +654,7 @@
         <div>3) Use <strong>Retry Last</strong> for fixable single-class failures.</div>
         <div>4) Use <strong>Escalate</strong> for repeated/multi-class failures.</div>
         <div>5) <strong>Resume</strong> after route + transition state look correct.</div>
+        <div style="margin-top:4px;font-size:.72rem;opacity:.85;">Accessibility: condensed controls support keyboard (Enter/Space) and screen-reader status updates.</div>
       </div>
       <div id="runs-list"></div>
       <div id="detail-panel" class="detail-panel" style="display: none;">
@@ -1710,9 +1724,10 @@ Hard constraints (do not echo these instructions in final output):
       const modeLabel = isSaved ? 'saved preference' : 'auto viewport';
       const isOn = Boolean(condensedMetaMode);
       condensedMetaStateEl.textContent = `Mode: ${modeLabel} · ${isOn ? 'ON' : 'OFF'}`;
+      const interactionHint = 'Click this badge or press Enter/Space to toggle condensed mode. Use Auto mode to clear saved preference and return to viewport defaults.';
       condensedMetaStateEl.title = isSaved
-        ? 'Using explicit saved preference from previous toggle selection.'
-        : 'Using automatic viewport-based default (mobile condensed, desktop expanded).';
+        ? `Using explicit saved preference from previous toggle selection. ${interactionHint}`
+        : `Using automatic viewport-based default (mobile condensed, desktop expanded). ${interactionHint}`;
       condensedMetaStateEl.setAttribute('aria-pressed', isOn ? 'true' : 'false');
       condensedMetaStateEl.setAttribute('aria-label', `Toggle condensed meta mode. Currently ${isOn ? 'on' : 'off'} (${modeLabel}).`);
       condensedMetaStateEl.style.borderColor = isSaved ? '#f59e0b' : '#22c55e';
