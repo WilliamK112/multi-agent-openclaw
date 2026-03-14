@@ -633,6 +633,7 @@
             <button id="condensed-meta-auto-btn" class="clear-btn" style="font-size:.72rem;padding:3px 8px;" title="Reset to automatic viewport behavior (clears saved condensed preference).">Auto mode</button>
             <span id="condensed-meta-state" role="button" tabindex="0" aria-label="Toggle condensed meta mode" style="font-size:.72rem;opacity:.85;padding:2px 8px;border:1px solid #334155;border-radius:999px;cursor:pointer;user-select:none;">Mode: auto</span>
             <span id="condensed-meta-kbd-hint" style="font-size:.68rem;opacity:.72;">Tip: Enter/Space toggles mode</span>
+            <span id="condensed-meta-sr-status" aria-live="polite" aria-atomic="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">Condensed meta mode ready.</span>
           </div>
         </div>
         <div>1) <strong>Pause</strong> if quality is drifting or retries look noisy.</div>
@@ -659,6 +660,7 @@
     let detailAgeTickInterval = null;
     let condensedMetaMode = false;
     let condensedMetaPreferenceSource = 'auto'; // 'auto' | 'saved'
+    let lastCondensedMetaAnnouncement = '';
     const CONDENSED_META_STORAGE_KEY = 'openclaw.condensedMetaMode';
     let allRunsCache = [];
     let trendWindow = 50;
@@ -765,6 +767,7 @@
     const condensedMetaToggleBtn = document.getElementById('condensed-meta-toggle');
     const condensedMetaAutoBtn = document.getElementById('condensed-meta-auto-btn');
     const condensedMetaStateEl = document.getElementById('condensed-meta-state');
+    const condensedMetaSrStatusEl = document.getElementById('condensed-meta-sr-status');
     const detailPanel = document.getElementById('detail-panel');
     const availableAgentsEl = document.getElementById('available-agents');
     const rolesGridEl = document.getElementById('roles-grid');
@@ -1705,13 +1708,23 @@ Hard constraints (do not echo these instructions in final output):
       if (!condensedMetaStateEl) return;
       const isSaved = condensedMetaPreferenceSource === 'saved';
       const modeLabel = isSaved ? 'saved preference' : 'auto viewport';
-      condensedMetaStateEl.textContent = `Mode: ${modeLabel} · ${condensedMetaMode ? 'ON' : 'OFF'}`;
+      const isOn = Boolean(condensedMetaMode);
+      condensedMetaStateEl.textContent = `Mode: ${modeLabel} · ${isOn ? 'ON' : 'OFF'}`;
       condensedMetaStateEl.title = isSaved
         ? 'Using explicit saved preference from previous toggle selection.'
         : 'Using automatic viewport-based default (mobile condensed, desktop expanded).';
+      condensedMetaStateEl.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      condensedMetaStateEl.setAttribute('aria-label', `Toggle condensed meta mode. Currently ${isOn ? 'on' : 'off'} (${modeLabel}).`);
       condensedMetaStateEl.style.borderColor = isSaved ? '#f59e0b' : '#22c55e';
       condensedMetaStateEl.style.color = isSaved ? '#fcd34d' : '#86efac';
       condensedMetaStateEl.style.background = isSaved ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)';
+      if (condensedMetaSrStatusEl) {
+        const announce = `Condensed meta ${isOn ? 'on' : 'off'}, ${modeLabel}.`;
+        if (announce !== lastCondensedMetaAnnouncement) {
+          condensedMetaSrStatusEl.textContent = announce;
+          lastCondensedMetaAnnouncement = announce;
+        }
+      }
     }
 
     function setCondensedMetaMode(on, options = {}) {
