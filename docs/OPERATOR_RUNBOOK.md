@@ -48,3 +48,11 @@ Short runbook for operator controls in `multi-agent-openclaw`.
 - `retry_route`
 - `close` (allowed/blocked + reason)
 - `gate` (pass/fail) + `reasons`
+
+## Lightweight UI smoke assertion (condensed controls)
+After any condensed-controls UI change, verify these quick assertions in the dashboard:
+1. Hover `Mode: ...` condensed badge shows source-aware tooltip and includes interaction hint (click / Enter / Space + Auto mode reset path).
+2. Keyboard focus on condensed badge (`Tab`) then press `Enter`/`Space` toggles condensed mode ON/OFF.
+3. Keyboard hint text remains visible: `Tip: Enter/Space toggles mode`.
+4. If a screen reader is active, condensed mode state/source announcement updates on toggle.
+5. `Auto mode` clears saved preference and reverts behavior to viewport default.
