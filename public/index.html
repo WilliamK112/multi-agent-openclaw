@@ -260,6 +260,14 @@
     .open-output-btn { margin-left:8px; font-size:.70rem; padding:4px 10px; border-radius:999px; border:1px solid #3f5577; background:#162135; color:#deebff; cursor:pointer; }
     .open-output-btn:hover { background:#1e2d47; border-color:#6283b5; }
     .run-meta { font-size: 0.79rem; color: #91a7cb; margin-top: 8px; line-height:1.45; }
+    .run-meta .meta-tight { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; margin-right:6px; }
+    .run-meta .meta-sep { color:#5f769d; margin:0 4px; }
+    .run-meta-optional { display:block; }
+    body.compact-run-meta .run-meta-optional { display:none; }
+    @media (max-width: 900px) {
+      .run-meta .meta-tight { white-space:normal; align-items:flex-start; }
+      body:not(.compact-run-meta) .run-meta-optional { display:none; }
+    }
     @keyframes pulseLive {
       0% { opacity: .9; transform: scale(1); }
       100% { opacity: 0; transform: scale(1.01); }
@@ -609,7 +617,10 @@
         <div class="json-preview" id="action-preset-preview"></div>
       </details>
       <div id="operator-help-panel" style="margin:10px 0 12px;background:#0f172a;border:1px solid #334155;border-radius:10px;padding:10px 12px;font-size:.78rem;line-height:1.5;color:#cbd5e1;">
-        <div style="font-weight:700;color:#93c5fd;margin-bottom:4px;">Operator Decision Flow</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="font-weight:700;color:#93c5fd;">Operator Decision Flow</div>
+          <button id="condensed-meta-toggle" class="clear-btn" style="font-size:.72rem;padding:3px 8px;">Condensed meta: OFF</button>
+        </div>
         <div>1) <strong>Pause</strong> if quality is drifting or retries look noisy.</div>
         <div>2) Check <strong>gate reasons</strong> + <strong>retry route</strong>.</div>
         <div>3) Use <strong>Retry Last</strong> for fixable single-class failures.</div>
@@ -632,6 +643,7 @@
     let pollInterval = null;
     let etaTickInterval = null;
     let detailAgeTickInterval = null;
+    let condensedMetaMode = false;
     let allRunsCache = [];
     let trendWindow = 50;
     let trendFilter = null; // {type:'gateReason'|'topDelta', value:string}
@@ -734,6 +746,7 @@
     const submitBtn = document.getElementById('submit');
     const runsList = document.getElementById('runs-list');
     const operatorHelpPanel = document.getElementById('operator-help-panel');
+    const condensedMetaToggleBtn = document.getElementById('condensed-meta-toggle');
     const detailPanel = document.getElementById('detail-panel');
     const availableAgentsEl = document.getElementById('available-agents');
     const rolesGridEl = document.getElementById('roles-grid');
@@ -1543,6 +1556,14 @@ Hard constraints (do not echo these instructions in final output):
       return 'why: gate healthy, no pause/escalation';
     }
 
+    function getOperatorRecommendationIcon(run) {
+      const rec = getOperatorRecommendation(run);
+      if (rec.badge === 'PAUSED') return '⏸️';
+      if (rec.badge === 'ESCALATE') return '🚨';
+      if (rec.badge === 'RETRY') return '🔁';
+      return '✅';
+    }
+
     function renderOperatorHelpPanel(runsWindow) {
       if (!operatorHelpPanel) return;
       const latest = Array.isArray(runsWindow) && runsWindow.length ? runsWindow[0] : null;
@@ -1662,6 +1683,14 @@ Hard constraints (do not echo these instructions in final output):
       return remainingSteps * perStep + queuedPenalty + pausedPenalty;
     }
 
+    function setCondensedMetaMode(on) {
+      condensedMetaMode = Boolean(on);
+      document.body.classList.toggle('compact-run-meta', condensedMetaMode);
+      if (condensedMetaToggleBtn) {
+        condensedMetaToggleBtn.textContent = `Condensed meta: ${condensedMetaMode ? 'ON' : 'OFF'}`;
+      }
+    }
+
     function formatCountdown(totalSeconds) {
       if (totalSeconds == null) return 'awaiting approval';
       const s = Math.max(0, Math.floor(totalSeconds));
@@ -1719,7 +1748,7 @@ Hard constraints (do not echo these instructions in final output):
           <div class="run-meta">${r.id} · ${new Date(r.createdAt).toLocaleString()} · main=${escapeHtml(String(r.roleAssignments?.main ?? 'none'))} · research=${escapeHtml(Array.isArray(r.roleAssignments?.research) ? r.roleAssignments.research.join(',') : String(r.roleAssignments?.research ?? 'none'))} · stages=${escapeHtml(String(r.workflowStagesSummary ?? '-'))}</div>
           <div class="run-meta">Final essay file: ${escapeHtml(String(r.docxPath || r.exportMdPath || 'not generated yet'))}</div>
           <div class="run-meta">ETA: <strong data-eta-countdown="${r.id}" data-eta-status="${escapeHtml(String(r.status || 'queued'))}" data-eta-target="${(() => { const etaSec = estimateEtaSeconds(r); const fp = `${r.status}|${r.nextStepIndex}|${r.plannedSteps}|${r.gate}|${r.paused}`; const prev = etaStateByRun[r.id]; if (!prev || prev.fp !== fp) { etaStateByRun[r.id] = { fp, target: etaSec == null ? 0 : (Date.now() + etaSec * 1000) }; } return etaStateByRun[r.id].target; })()}">estimating…</strong></div>
-          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} · anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))} · paused=${r.paused?'yes':'no'} · escalations=${escapeHtml(String(r.escalation_count ?? 0))} · retry_route=${r.operator_retry_route ? `${escapeHtml(String(r.operator_retry_route.failure_class || '—'))}->${escapeHtml(String(r.operator_retry_route.target_role || '—'))}` : '—'} · ${escapeHtml(getOperatorRecommendationShortWhy(r))}</div>
+          <div class="run-meta">Quality · v2_score=${escapeHtml(String(r.v2_score ?? '—'))} · top_delta=${(() => { const t = r.anti_overfitting_applied ? (r.top_delta_effective || r.top_delta_raw || r.top_delta) : (r.top_delta_raw || r.top_delta_effective || r.top_delta); return t ? `${escapeHtml(String(t.dimension))}:${escapeHtml(String(t.delta))}` : '—'; })()} · gate=${r.gate===null?'—':(r.gate?'pass':'fail')} · close=${r.close_allowed===null?'—':(r.close_allowed?'allowed':'blocked')}(${escapeHtml(String(r.close_reason ?? '—'))}) · reasons=${escapeHtml((r.gateReasons||[]).join(', ') || '—')} <span class="run-meta-optional">· anti=${r.anti_overfitting_applied?'on':'off'} · domains=${escapeHtml(String(r.unique_domains ?? '—'))} · facts=${escapeHtml(String(r.facts_count ?? '—'))} · unsupported_claims=${escapeHtml(String(r.unsupported_claims_count ?? '—'))} · summary=${escapeHtml(String(r.run_summary_path ?? '—'))}</span> <span class="meta-sep">·</span> <span class="meta-tight">paused=${r.paused?'yes':'no'}</span> <span class="meta-tight">escalations=${escapeHtml(String(r.escalation_count ?? 0))}</span> <span class="meta-tight run-meta-optional">retry_route=${r.operator_retry_route ? `${escapeHtml(String(r.operator_retry_route.failure_class || '—'))}→${escapeHtml(String(r.operator_retry_route.target_role || '—'))}` : '—'}</span> <span class="meta-tight">rec=${getOperatorRecommendationIcon(r)} ${escapeHtml(getOperatorRecommendationShortWhy(r))}</span></div>
         </div>
       `).join('');
       runsList.querySelectorAll('.run-card').forEach(el => {
@@ -2480,6 +2509,18 @@ Hard constraints (do not echo these instructions in final output):
         actionHintEl.textContent = `CSV export failed: ${e.message}`;
       }
     });
+
+    if (condensedMetaToggleBtn) {
+      condensedMetaToggleBtn.addEventListener('click', () => {
+        setCondensedMetaMode(!condensedMetaMode);
+      });
+    }
+    // Optional mobile-first default (no persistence yet): start condensed on narrow viewports.
+    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
+      setCondensedMetaMode(true);
+    } else {
+      setCondensedMetaMode(false);
+    }
 
     detectOpenClawActive();
     renderClarifier(goalInput.value);
