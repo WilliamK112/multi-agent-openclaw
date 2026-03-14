@@ -264,6 +264,15 @@
     .run-meta .meta-sep { color:#5f769d; margin:0 4px; }
     .run-meta-optional { display:block; }
     body.compact-run-meta .run-meta-optional { display:none; }
+    #condensed-meta-state:focus-visible {
+      outline: 2px solid #93c5fd;
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+    }
+    #condensed-meta-state:active {
+      transform: translateY(1px);
+      filter: brightness(1.05);
+    }
     @media (max-width: 900px) {
       .run-meta .meta-tight { white-space:normal; align-items:flex-start; }
       body:not(.compact-run-meta) .run-meta-optional { display:none; }
@@ -622,7 +631,8 @@
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <button id="condensed-meta-toggle" class="clear-btn" style="font-size:.72rem;padding:3px 8px;" title="Toggle condensed meta and save this preference for future sessions.">Condensed meta: OFF</button>
             <button id="condensed-meta-auto-btn" class="clear-btn" style="font-size:.72rem;padding:3px 8px;" title="Reset to automatic viewport behavior (clears saved condensed preference).">Auto mode</button>
-            <span id="condensed-meta-state" style="font-size:.72rem;opacity:.85;padding:2px 8px;border:1px solid #334155;border-radius:999px;">Mode: auto</span>
+            <span id="condensed-meta-state" role="button" tabindex="0" aria-label="Toggle condensed meta mode" style="font-size:.72rem;opacity:.85;padding:2px 8px;border:1px solid #334155;border-radius:999px;cursor:pointer;user-select:none;">Mode: auto</span>
+            <span id="condensed-meta-kbd-hint" style="font-size:.68rem;opacity:.72;">Tip: Enter/Space toggles mode</span>
           </div>
         </div>
         <div>1) <strong>Pause</strong> if quality is drifting or retries look noisy.</div>
@@ -2554,6 +2564,17 @@ Hard constraints (do not echo these instructions in final output):
     if (condensedMetaAutoBtn) {
       condensedMetaAutoBtn.addEventListener('click', () => {
         applyAutoCondensedMetaMode();
+      });
+    }
+    if (condensedMetaStateEl) {
+      condensedMetaStateEl.addEventListener('click', () => {
+        setCondensedMetaMode(!condensedMetaMode, { persist: true });
+      });
+      condensedMetaStateEl.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          setCondensedMetaMode(!condensedMetaMode, { persist: true });
+        }
       });
     }
 
