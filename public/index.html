@@ -379,12 +379,23 @@
     <div class="topbar">
       <div class="topbar-left">
         <h1>multi-agent-openclaw</h1>
-        <div class="subtitle">Design and run structured multi-agent research workflows locally.</div>
+        <div class="subtitle">一个界面完成：输入目标 → 拖拽代理到 Workflow → 一键运行并拿到结果。</div>
       </div>
       <div class="status-badge" id="system-status">System: checking…</div>
     </div>
 
-    <details class="panel knox-arch-panel" style="margin-bottom:16px;" open>
+    <div class="panel" style="margin-bottom:12px;background:linear-gradient(180deg,#0f1d35 0%,#0c172a 100%);border-color:#35527d;">
+      <h3 style="margin-bottom:6px;">新手 30 秒上手</h3>
+      <div style="font-size:.84rem;color:#c5d7f3;line-height:1.55;">
+        <strong>1)</strong> 在下方输入你要达成的目标 → <strong>2)</strong> 把左侧 Agent 拖进中间 Workflow 阶段 → <strong>3)</strong> 点击 Run Workflow。
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="clear-btn" id="simple-starter-btn">使用简单默认流程</button>
+        <span id="ux-health" style="font-size:.76rem;color:#9ec5ff;">UX self-check: pending</span>
+      </div>
+    </div>
+
+    <details class="panel knox-arch-panel" style="margin-bottom:16px;" >
       <summary style="cursor:pointer;font-size:.92rem;font-weight:600;color:#93c5fd;">Memory System Architecture</summary>
       <div style="font-size:.8rem;color:#9caecc;margin-top:4px;margin-bottom:12px;">Intelligent plan–task–memory orchestration, dynamic model selection</div>
       <div class="knox-diagram">
@@ -513,9 +524,9 @@
 
     <div class="step">Step 1 · Define Task</div>
     <div class="form-row">
-      <input type="text" id="goal" placeholder="Enter a research topic, policy question, or writing task" />
+      <input type="text" id="goal" placeholder="输入你的目标（例如：做一个直观的多代理网页并给出可上线版本）" />
       <button class="btn-primary" id="submit">Run Workflow</button>
-      <span style="margin-left:8px;color:#aab4c9;font-size:.8rem;">Research Essay Mode</span>
+      <span style="margin-left:8px;color:#aab4c9;font-size:.8rem;">Simple Single-UI Mode</span>
     </div>
     <div class="panel" style="margin-top:-8px;margin-bottom:12px;">
       <h3>Task Clarity Check</h3>
@@ -533,8 +544,8 @@
     <div class="panel" style="margin-bottom:12px;">
       <h3>Mode</h3>
       <div class="mode-switch" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <label style="margin-right:2px;padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;"><input type="radio" name="mode" value="roles" checked /> Role Assignment</label>
-        <label style="padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;"><input type="radio" name="mode" value="workflow" /> Workflow Builder</label>
+        <label style="margin-right:2px;padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;opacity:.7;"><input type="radio" name="mode" value="roles" /> Role Assignment (advanced)</label>
+        <label style="padding:5px 9px;border:1px solid #3b4256;border-radius:999px;background:#141926;"><input type="radio" name="mode" value="workflow" checked /> Workflow Builder (recommended)</label>
         <button class="clear-btn" id="recommend-btn" style="margin-left:8px;">Recommend Workflow</button>
         <span id="recommend-status" style="font-size:0.78rem;opacity:.85;margin-left:4px;"></span>
       </div>
@@ -744,7 +755,7 @@
       reviewer: { multi: true, title: 'Reviewer', desc: 'Provides editorial and structural feedback' },
     };
     let roleAssignments = { main: '', research: [], executor: '', qa: [], reviewer: [] };
-    let mode = 'roles';
+    let mode = 'workflow';
     let workflowStages = [
       { id: 's1', type: 'research', agents: ['deepseek:local', 'chatgpt-api:gpt-4o-mini'], mergePolicy: 'none', notes: 'sources>=10', roleId: 'researcher_1' },
       { id: 's2', type: 'plan', agents: ['chatgpt-api:gpt-4o-mini'], mergePolicy: 'summary', notes: 'outline with thesis+3-5 sections', roleId: 'outliner' },
@@ -820,6 +831,8 @@
     const applyRecommendBtn = document.getElementById('apply-recommend-btn');
     const resetDefaultWorkflowBtn = document.getElementById('reset-default-workflow-btn');
     const recommendStatusEl = document.getElementById('recommend-status');
+    const simpleStarterBtn = document.getElementById('simple-starter-btn');
+    const uxHealthEl = document.getElementById('ux-health');
     const systemStatusEl = document.getElementById('system-status');
 
     function getActiveChat() {
@@ -1250,6 +1263,7 @@
         const assigned = workflowStages.reduce((n, s) => n + ((s.agents || []).length), 0);
         workflowSummaryEl.textContent = `${workflowStages.length} stages · ${assigned} agent assignments · mode: workflow builder`;
       }
+      runUxSelfCheck();
 
       workflowStagesEl.querySelectorAll('[data-wmerge]').forEach(el=>el.addEventListener('change',()=>{
         const st=workflowStages.find(x=>x.id===el.dataset.wmerge); if(st) st.mergePolicy=el.value; renderWorkflowPreview();
@@ -1391,6 +1405,22 @@ Hard constraints (do not echo these instructions in final output):
         { id: 's3', type: 'qa', agents: ['anthropic:sonnet'], mergePolicy: 'judge', notes: 'strict gate and actionable fixes', roleId: 'qa_judge' },
       ];
       return { stages, roles, roleAssignmentsByRole: roleMap, explainWhy: 'Default research->synth->qa pipeline balances evidence gathering, summary quality, and validation.', costHint: 'medium' };
+    }
+
+    function runUxSelfCheck() {
+      if (!uxHealthEl) return;
+      const goalReady = (goalInput?.value || '').trim().length > 6;
+      const stageCount = Array.isArray(workflowStages) ? workflowStages.length : 0;
+      const assignedCount = (workflowStages || []).reduce((n, s) => n + ((s.agents || []).length), 0);
+      const blockers = [];
+      if (!goalReady) blockers.push('缺少明确目标');
+      if (stageCount < 3) blockers.push('阶段太少（建议≥3）');
+      if (assignedCount < 2) blockers.push('agent 分配太少');
+      const status = blockers.length
+        ? `UX self-check: 需优化 → ${blockers.join(' / ')}`
+        : `UX self-check: ✅ 结构清晰（${stageCount} stages, ${assignedCount} assignments）`;
+      uxHealthEl.textContent = status;
+      uxHealthEl.style.color = blockers.length ? '#fbbf24' : '#86efac';
     }
 
     function classifyGoal(goal) {
@@ -2327,6 +2357,7 @@ Hard constraints (do not echo these instructions in final output):
         persistChats();
       }
       renderClarifier(goalInput.value);
+      runUxSelfCheck();
     });
     clarifyBtn.addEventListener('click', () => renderClarifier(goalInput.value));
     applyClarifyTemplateBtn.addEventListener('click', () => {
@@ -2345,11 +2376,34 @@ Hard constraints (do not echo these instructions in final output):
     renderWorkflowStages();
     renderWorkflowRoles();
     renderWorkflowPreview();
-    switchMode('roles');
+    switchMode('workflow');
+    runUxSelfCheck();
 
     document.querySelectorAll('input[name="mode"]').forEach(r => {
-      r.addEventListener('change', () => switchMode(r.value));
+      r.addEventListener('change', () => {
+        switchMode(r.value);
+        runUxSelfCheck();
+      });
     });
+
+    if (simpleStarterBtn) {
+      simpleStarterBtn.addEventListener('click', () => {
+        const d = defaultWorkflowBundle();
+        workflowStages = d.stages.map(s => ({ ...s }));
+        workflowRoles = d.roles.map(r => ({ ...r }));
+        roleAssignmentsByRole = { ...(d.roleAssignmentsByRole || {}) };
+        renderWorkflowStages();
+        renderWorkflowRoles();
+        renderWorkflowPreview();
+        switchMode('workflow');
+        const workflowRadio = document.querySelector('input[name="mode"][value="workflow"]');
+        if (workflowRadio) workflowRadio.checked = true;
+        recommendStatusEl.textContent = '已应用简单默认流程，直接可运行。';
+        runUxSelfCheck();
+      });
+    }
+
+    setInterval(runUxSelfCheck, 5 * 60 * 1000);
 
     addAgentBtn.addEventListener('click', () => {
       const id = (newAgentIdEl.value || '').trim();
