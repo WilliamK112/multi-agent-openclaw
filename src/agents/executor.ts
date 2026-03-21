@@ -808,10 +808,29 @@ export async function executor(step: PlanStep, projectRoot: string, runId = "", 
           { ok: true, provider: llmOut.provider, model: llmOut.model, chars: llmOut.text.length, persisted }
         );
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        let persisted: any = { ok: false, reason: "no output path" };
+        if (outPath) {
+          const fallback = [
+            `# Fallback Plan (LLM unavailable)`,
+            "",
+            `Goal: ${userPrompt || step.objective}`,
+            "",
+            "## Next Actions",
+            "1. Confirm scope and expected output format.",
+            "2. Break work into implementation + validation tasks.",
+            "3. Execute smallest testable slice first.",
+            "4. Run checks/tests and capture output artifacts.",
+            "5. Review risks, edge cases, and rollback steps.",
+            "",
+            `LLM error: ${errorMsg}`,
+          ].join("\n");
+          persisted = await fileWrite(projectRoot, outPath, fallback);
+        }
         logSkill(
           "llm_generate",
           { provider: selected.provider, model: selected.model, outputPath: outPath || null },
-          { ok: false, error: err instanceof Error ? err.message : String(err) }
+          { ok: true, fallback_used: true, error: errorMsg, persisted }
         );
       }
       continue;

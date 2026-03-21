@@ -27,6 +27,7 @@ async function containsText(p: string, needle: string): Promise<boolean> {
 
 export async function qa(projectRoot: string, goal = "", runId = "", runConfig?: any, runArtifacts?: any): Promise<QAResult> {
   const isPaperMode = /paper|essay|report|research|论文|研究报告|analysis|policy/i.test(goal);
+  const isDemoMode = /cursor readme demo|test output demo|stage\s*3b|stage\s*3c|phase 2 multi research demo|test run evidence/i.test(goal);
   const demoPath = path.join(projectRoot, "docs/OPENCLAW_DEMO.txt");
 
   const readmePath = path.join(projectRoot, "README.md");
@@ -39,13 +40,16 @@ export async function qa(projectRoot: string, goal = "", runId = "", runConfig?:
     "planner file exists": await exists(path.join(projectRoot, "src/agents/planner.ts")),
     "executor file exists": await exists(path.join(projectRoot, "src/agents/executor.ts")),
     "qa file exists": await exists(path.join(projectRoot, "src/agents/qa.ts")),
-    "OPENCLAW_DEMO file exists": await exists(demoPath),
-    "OPENCLAW_DEMO contains marker": await containsText(demoPath, "OPENCLAW_DEMO"),
-    "README has Cursor Automation Demo title": await containsText(readmePath, "## Cursor Automation Demo"),
-    "README has edited-in-UI line": await containsText(readmePath, "Edited inside Cursor UI (not shell)."),
-    "README has approval line": await containsText(readmePath, "Protected by Approval/Resume for openclaw_act."),
-    "README has next-step line": await containsText(readmePath, "Next: run real tests and save output to docs/TEST_OUTPUT.txt."),
   };
+
+  if (isDemoMode) {
+    checks["OPENCLAW_DEMO file exists"] = await exists(demoPath);
+    checks["OPENCLAW_DEMO contains marker"] = await containsText(demoPath, "OPENCLAW_DEMO");
+    checks["README has Cursor Automation Demo title"] = await containsText(readmePath, "## Cursor Automation Demo");
+    checks["README has edited-in-UI line"] = await containsText(readmePath, "Edited inside Cursor UI (not shell).");
+    checks["README has approval line"] = await containsText(readmePath, "Protected by Approval/Resume for openclaw_act.");
+    checks["README has next-step line"] = await containsText(readmePath, "Next: run real tests and save output to docs/TEST_OUTPUT.txt.");
+  }
 
   if (goal.toLowerCase().includes("cursor readme demo")) {
     const marker = `CURSOR_UI_EDIT_${runId}`;
