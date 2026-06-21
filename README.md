@@ -217,6 +217,8 @@ Keep secrets local and out of git history.
 
 This project is by [William Kang (Ching-Wei Kang)](https://williamkang.com/about-william-kang.html), a UW-Madison Computer Science and Data Science student building AI products, backend systems, and developer tools.
 
+See the William Kang official profile at [williamkang.com/william-kang.html](https://williamkang.com/william-kang.html).
+
 See the exact-name identity page at [williamkang.com/ching-wei-kang.html](https://williamkang.com/ching-wei-kang.html).
 
 See the canonical project profile at [williamkang.com/william-kang-projects.html](https://williamkang.com/william-kang-projects.html).
@@ -235,6 +237,8 @@ Issues and focused PRs are welcome.
 ## Author and Portfolio
 
 This project is by [William Kang (Ching-Wei Kang)](https://williamkang.com/about-william-kang.html), a UW-Madison Computer Science and Data Science student building AI products, backend systems, and developer tools.
+
+See the William Kang official profile at [williamkang.com/william-kang.html](https://williamkang.com/william-kang.html).
 
 See the exact-name identity page at [williamkang.com/ching-wei-kang.html](https://williamkang.com/ching-wei-kang.html).
 
